@@ -1,0 +1,13 @@
+{
+  "last_sent_timestamp": "2026-10-01T06:15:06.851547+00:00",
+  "sent_records": [
+    {
+      "user_id": "candidate_default_user",
+      "recipient_email": "jeshurunselvakumar640@gmail.com",
+      "digest_date": "2026-10-01",
+      "sent_at": "2026-10-01T06:15:06.851547+00:00",
+      "news_count": 5,
+      "jobs_count": 6
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+/* Custom Dashboard Enhancements */
+@keyframes swipeRight {
+    0% {
+        transform: translateX(0) rotate(0deg);
+        opacity: 1;
+    }
+
+    100% {
+        transform: translateX(120%) rotate(15deg);
+        opacity: 0;
+    }
+}
+
+@keyframes swipeLeft {
+    0% {
+        transform: translateX(0) rotate(0deg);
+        opacity: 1;
+    }
+
+    100% {
+        transform: translateX(-120%) rotate(-15deg);
+        opacity: 0;
+    }
+}
+
+.animate-swipe-right {
+    animation: swipeRight 0.35s ease-out forwards;
+}
+
+.animate-swipe-left {
+    animation: swipeLeft 0.35s ease-out forwards;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(2, 6, 23, 0.5);
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(51, 65, 85, 0.8);
+    border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(71, 85, 105, 1);
+}
+
+.glass-panel {
+    background: rgba(15, 23, 42, 0.75);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@keyframes swipeDown {
+    0% {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+
+    100% {
+        transform: translateY(120%) scale(0.9);
+        opacity: 0;
+    }
+}
+
+.animate-swipe-down {
+    animation: swipeDown 0.35s ease-out forwards;
+}

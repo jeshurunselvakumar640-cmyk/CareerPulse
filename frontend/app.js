@@ -5,7 +5,16 @@ let currentSwipeIndex = 0;
 let currentEmailPayload = null;
 let currentTechNews = [];
 
+// Global auth state — prevents rendering before auth is resolved
+const authState = {
+    loading: true,
+    authenticated: false,
+    user: null
+};
+
 const USER_AVATAR_SVG = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 24 24' fill='none' stroke='%23818cf8' stroke-width='1.5'><path d='M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg>`;
+
+const APP_VIEW_HASHES = ["dashboard", "profile", "interested", "waitlist", "news"];
 
 function escapeHtml(text) {
     if (!text) return "";
@@ -18,9 +27,16 @@ function escapeHtml(text) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+    // Hide both containers initially while auth resolves
+    const unauthEl = document.getElementById("unauthContainer");
+    const authEl = document.getElementById("authContainer");
+    if (unauthEl) unauthEl.classList.add("hidden");
+    if (authEl) authEl.classList.add("hidden");
+
     checkBackendHealth();
-    fetchUserProfile();
-    fetchSupabaseSavedJobs();
+
+    // Sequential auth init: authenticate first, then load dependent data
+    initializeAuth();
 
     const logoutBtn = document.getElementById("profileLogoutBtn");
     if (logoutBtn) {
@@ -69,11 +85,68 @@ async function checkBackendHealth() {
     }
 }
 
-async function fetchUserProfile() {
+/**
+ * Sequential auth initialization:
+ * 1. Fetch /api/user/profile (uses httponly cookie automatically)
+ * 2. If authenticated → show UI, navigate to correct view
+ * 3. If not authenticated → show login button
+ */
+async function initializeAuth() {
     try {
-        const authHeaders = await getAuthHeader();
         const res = await fetch("/api/user/profile", {
-            headers: { ...authHeaders },
+            credentials: "same-origin"
+        });
+
+        if (!res.ok) {
+            redirectUnauthenticatedToLanding();
+            return;
+        }
+
+        const data = await res.json();
+        authState.loading = false;
+
+        if (data.authenticated && data.profile) {
+            authState.authenticated = true;
+            authState.user = data.profile;
+            showAuthenticatedUI(data.profile);
+
+            // After profile loads, also fetch saved jobs
+            fetchSupabaseSavedJobs();
+
+            // Navigate based on URL hash or profile completeness
+            const hash = window.location.hash.replace("#", "");
+            if (hash === "profile" && !data.profile_complete) {
+                navigateTo("profile");
+            } else if (hash && APP_VIEW_HASHES.includes(hash)) {
+                navigateTo(hash);
+            } else {
+                navigateTo("dashboard");
+            }
+        } else {
+            authState.authenticated = false;
+            // The dashboard app is an authenticated surface only.
+            redirectUnauthenticatedToLanding();
+        }
+    } catch (e) {
+        console.error("Auth initialization error:", e);
+        authState.loading = false;
+        redirectUnauthenticatedToLanding();
+    }
+}
+
+/**
+ * Sends any unauthenticated visitor of /app back to the public landing page.
+ * Uses replace() so browser Back never re-exposes the authenticated shell.
+ */
+function redirectUnauthenticatedToLanding() {
+    if (window.location.pathname === "/") return;
+    window.location.replace("/");
+}
+
+async function fetchUserProfile() {
+    // Reload profile data and update UI without full re-auth
+    try {
+        const res = await fetch("/api/user/profile", {
             credentials: "same-origin"
         });
 
@@ -84,30 +157,22 @@ async function fetchUserProfile() {
 
         if (res.ok) {
             const data = await res.json();
-            if (data.profile) {
+            if (data.authenticated && data.profile) {
+                authState.user = data.profile;
                 showAuthenticatedUI(data.profile);
                 return;
             }
         }
     } catch (e) {
-        console.error("Profile load error:", e);
+        console.error("Profile reload error:", e);
     }
+}
 
-    showAuthenticatedUI({
-        name: "Jeshurun Selvakumar",
-        email: "jeshurunselvakumar640@gmail.com",
-        profile_picture: "",
-        headline: "Computer Engineering Student | SIES Graduate School of Technology",
-        degree: "B.E. Computer Engineering",
-        college: "SIES Graduate School of Technology",
-        year: "Final Year (Semester 7)",
-        github: "https://github.com/JeshurunSelvakumar",
-        linkedin: "https://linkedin.com/in/jeshurun-selvakumar",
-        projects: ["CareerPulse AI Agent", "Chordician Application"],
-        location: "Mumbai / Navi Mumbai",
-        experience: "Student / Internship",
-        skills: ["Python", "Java", "C", "React", "JavaScript", "SQL", "FastAPI"]
-    });
+function showUnauthenticatedUI() {
+    const unauthEl = document.getElementById("unauthContainer");
+    const authEl = document.getElementById("authContainer");
+    if (unauthEl) unauthEl.classList.remove("hidden");
+    if (authEl) authEl.classList.add("hidden");
 }
 
 async function saveProfileChanges(event) {
@@ -148,7 +213,10 @@ async function saveProfileChanges(event) {
         const data = await res.json();
         if (res.ok && data.status === "success") {
             showToast("Profile settings saved directly to Supabase!");
-            fetchUserProfile();
+            // Reload profile and then redirect existing users to dashboard
+            await fetchUserProfile();
+            // After first-time profile save, navigate to dashboard
+            setTimeout(() => navigateTo("dashboard"), 400);
         } else {
             showToast(data.detail || "Error saving profile settings.");
         }
@@ -200,6 +268,30 @@ async function persistOpportunityState(job, status) {
     }
 }
 
+/**
+ * Safely set an avatar image element.
+ * - If url is a valid http/https URL, set src and attach onerror fallback.
+ * - If url is empty/invalid, immediately show the fallback SVG.
+ * - onerror fires at most once per element (flag guard prevents retry loops).
+ */
+function setAvatarImage(el, url) {
+    if (!el) return;
+    el._avatarErrorFired = false; // reset guard
+    if (url && (url.startsWith("http://") || url.startsWith("https://"))) {
+        el.src = url;
+        el.onerror = function () {
+            if (!this._avatarErrorFired) {
+                this._avatarErrorFired = true;
+                this.onerror = null; // prevent further retries
+                this.src = USER_AVATAR_SVG;
+            }
+        };
+    } else {
+        el.src = USER_AVATAR_SVG;
+        el.onerror = null;
+    }
+}
+
 function showAuthenticatedUI(user) {
     const unauth = document.getElementById("unauthContainer");
     const auth = document.getElementById("authContainer");
@@ -208,65 +300,109 @@ function showAuthenticatedUI(user) {
     if (auth) auth.classList.remove("hidden");
 
     const name = user.name || "Jeshurun Selvakumar";
-    const email = user.email || "jeshurunselvakumar640@gmail.com";
-    const avatar = user.profile_picture && user.profile_picture.startsWith("http") ? user.profile_picture : USER_AVATAR_SVG;
+    const email = user.email || "";
+    const profilePicUrl = user.profile_picture || "";
     const headline = user.headline || "Computer Engineering Student | SIES GST";
     const location = user.location || "Mumbai / Navi Mumbai";
     const skillsArr = user.skills || ["Python", "Java", "C", "React", "JavaScript", "SQL", "FastAPI"];
 
     if (document.getElementById("sidebarName")) document.getElementById("sidebarName").textContent = name;
-    if (document.getElementById("sidebarAvatar")) {
-        document.getElementById("sidebarAvatar").src = avatar;
-        document.getElementById("sidebarAvatar").onerror = function () { this.src = USER_AVATAR_SVG; };
-    }
+    setAvatarImage(document.getElementById("sidebarAvatar"), profilePicUrl);
 
     if (document.getElementById("headerName")) document.getElementById("headerName").textContent = name.split(" ")[0];
-    if (document.getElementById("headerAvatar")) {
-        document.getElementById("headerAvatar").src = avatar;
-        document.getElementById("headerAvatar").onerror = function () { this.src = USER_AVATAR_SVG; };
-    }
+    setAvatarImage(document.getElementById("headerAvatar"), profilePicUrl);
 
-    if (document.getElementById("welcomeHeading")) document.getElementById("welcomeHeading").textContent = `Good evening, ${name.split(" ")[0]} 👋`;
+    const hour = new Date().getHours();
+    const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+    if (document.getElementById("welcomeHeading")) document.getElementById("welcomeHeading").textContent = `${greeting}, ${name.split(" ")[0]} 👋`;
     if (document.getElementById("cardProfileName")) document.getElementById("cardProfileName").textContent = name;
     if (document.getElementById("cardProfileHeadline")) document.getElementById("cardProfileHeadline").textContent = headline;
     if (document.getElementById("cardProfileLocation")) document.getElementById("cardProfileLocation").textContent = location;
-    if (document.getElementById("cardProfileImg")) {
-        document.getElementById("cardProfileImg").src = avatar;
-        document.getElementById("cardProfileImg").onerror = function () { this.src = USER_AVATAR_SVG; };
-    }
+    setAvatarImage(document.getElementById("cardProfileImg"), profilePicUrl);
 
     if (document.getElementById("profilePageName")) document.getElementById("profilePageName").textContent = name;
     if (document.getElementById("profilePageEmail")) document.getElementById("profilePageEmail").textContent = email;
-    if (document.getElementById("profilePageAvatar")) {
-        document.getElementById("profilePageAvatar").src = avatar;
-        document.getElementById("profilePageAvatar").onerror = function () { this.src = USER_AVATAR_SVG; };
-    }
+    setAvatarImage(document.getElementById("profilePageAvatar"), profilePicUrl);
 
     if (document.getElementById("profHeadline")) document.getElementById("profHeadline").value = headline;
     if (document.getElementById("profDegree")) document.getElementById("profDegree").value = user.degree || "B.E. Computer Engineering";
     if (document.getElementById("profCollege")) document.getElementById("profCollege").value = user.college || "SIES Graduate School of Technology";
     if (document.getElementById("profYear")) document.getElementById("profYear").value = user.year || "Final Year (Semester 7)";
     if (document.getElementById("profLocation")) document.getElementById("profLocation").value = location;
-    if (document.getElementById("profGithub")) document.getElementById("profGithub").value = user.github || "https://github.com/JeshurunSelvakumar";
-    if (document.getElementById("profLinkedin")) document.getElementById("profLinkedin").value = user.linkedin || "https://linkedin.com/in/jeshurun-selvakumar";
-    if (document.getElementById("profProjects")) document.getElementById("profProjects").value = Array.isArray(user.projects) ? user.projects.join(", ") : (user.projects || "CareerPulse AI Agent, Chordician Application");
+    if (document.getElementById("profGithub")) document.getElementById("profGithub").value = user.github || "";
+    if (document.getElementById("profLinkedin")) document.getElementById("profLinkedin").value = user.linkedin || "";
+    if (document.getElementById("profProjects")) document.getElementById("profProjects").value = Array.isArray(user.projects) ? user.projects.join(", ") : (user.projects || "");
     if (document.getElementById("profSkills")) document.getElementById("profSkills").value = Array.isArray(skillsArr) ? skillsArr.join(", ") : skillsArr;
 
     renderSkillsBadge(Array.isArray(skillsArr) ? skillsArr : ["Python", "FastAPI"]);
 }
 
+function clearUserState() {
+    // Clear all user-specific state so previous user's data never leaks
+    mockOpportunities = [];
+    savedInterestedJobs = [];
+    waitlistedJobs = [];
+    currentSwipeIndex = 0;
+    currentEmailPayload = null;
+    currentTechNews = [];
+    authState.authenticated = false;
+    authState.user = null;
+
+    // Reset avatar images to fallback immediately
+    ["sidebarAvatar", "headerAvatar", "cardProfileImg", "profilePageAvatar"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.src = USER_AVATAR_SVG; el.onerror = null; }
+    });
+
+    // Clear job lists UI
+    const intEl = document.getElementById("interestedJobsContainer");
+    const wlEl = document.getElementById("waitlistedJobsContainer");
+    if (intEl) intEl.innerHTML = "";
+    if (wlEl) wlEl.innerHTML = "";
+    updateStats();
+}
+
+/**
+ * Clears every browser-side cache that could hold user-specific state
+ * (saved jobs, discovered opportunities, stored auth artifacts).
+ */
+function clearClientCaches() {
+    try {
+        window.localStorage.clear();
+    } catch (e) { /* storage may be unavailable */ }
+    try {
+        window.sessionStorage.clear();
+    } catch (e) { /* storage may be unavailable */ }
+    try {
+        if (typeof caches !== "undefined" && caches.keys) {
+            caches.keys().then(keys => keys.forEach(k => caches.delete(k))).catch(() => { });
+        }
+    } catch (e) { /* caches API unsupported */ }
+}
+
 async function handleLogout() {
+    // 1. Best-effort in-app Supabase sign-out
     try {
         if (window.supabaseClient) {
             await window.supabaseClient.auth.signOut();
         }
-        await fetch("/api/auth/logout", { method: "GET", credentials: "same-origin" });
+    } catch (e) {
+        console.error("Supabase sign-out error:", e);
+    }
+
+    // 2. Invalidate the server session and clear the auth cookie
+    try {
+        await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
     } catch (e) {
         console.error("Logout error:", e);
     }
-    document.getElementById("authContainer")?.classList.add("hidden");
-    document.getElementById("unauthContainer")?.classList.remove("hidden");
-    showToast("Successfully logged out.");
+
+    // 3. Clear all frontend auth state and cached user data
+    clearUserState();
+    clearClientCaches();
+
+    // 4. Replace the history entry so Back cannot return to the authenticated UI
+    window.location.replace("/");
 }
 
 function navigateTo(view) {

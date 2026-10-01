@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CareerPulse — Your Personal Career Opportunity Agent</title>
+    <meta name="description"
+        content="CareerPulse uses AI-powered web search and personalization to discover relevant jobs, internships, and technology opportunities so you spend less time searching and more time applying.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 850: '#151f32', 900: '#0f172a', 950: '#090d16' }
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="/static/styles/landing.css">
+</head>
+
+<body class="cp-body bg-slate-950 text-slate-100 font-sans antialiased">
+    <div class="cp-backdrop"></div>
+    <div class="cp-grid-overlay"></div>
+
+    <!-- ============ NAVIGATION ============ -->
+    <header class="cp-nav">
+        <div class="cp-shell flex items-center justify-between gap-4 py-3">
+            <a href="#top" class="flex items-center gap-3 min-w-0">
+                <span class="cp-brand-mark">CP</span>
+                <span class="min-w-0">
+                    <span class="block text-sm font-extrabold tracking-tight text-white leading-tight">CAREERPULSE</span>
+                    <span class="block text-[10px] text-slate-400 font-medium leading-tight">Career Opportunity Agent</span>
+                </span>
+            </a>
+
+            <nav class="hidden lg:flex items-center gap-6">
+                <a class="cp-nav-link" href="#about">Overview</a>
+                <a class="cp-nav-link" href="#how-it-works">How It Works</a>
+                <a class="cp-nav-link" href="#opportunities">Opportunities</a>
+                <a class="cp-nav-link" href="#matching">AI Matching</a>
+                <a class="cp-nav-link" href="#digest">Daily Digest</a>
+                <a class="cp-nav-link" href="#faq">FAQ</a>
+            </nav>
+
+            <div class="hidden lg:flex items-center gap-3">
+                <a href="#about" class="cp-btn cp-btn-ghost !min-h-[2.5rem] !py-2 !px-4 !text-xs">Know More</a>
+                <a href="/api/auth/linkedin" id="navAuthLink"
+                    class="cp-btn cp-btn-linkedin !min-h-[2.5rem] !py-2 !px-4 !text-xs">
+                    <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                            d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                    </svg>
+                    <span id="navAuthLabel">Connect with LinkedIn</span>
+                </a>
+            </div>
+
+            <button id="navToggle" type="button" aria-label="Toggle navigation"
+                aria-expanded="false" aria-controls="mobileMenu"
+                class="lg:hidden inline-flex items-center justify-center w-10 h-10 rounded-xl border border-slate-700/60 bg-slate-900/70 text-slate-200">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+            </button>
+        </div>
+
+        <div id="mobileMenu" class="cp-mobile-menu lg:hidden border-t border-slate-800/80">
+            <div class="cp-shell py-3">
+                <a class="cp-mobile-link" href="#about">Overview</a>
+                <a class="cp-mobile-link" href="#why">Why It Exists</a>
+                <a class="cp-mobile-link" href="#how-it-works">How It Works</a>
+                <a class="cp-mobile-link" href="#opportunities">Opportunities</a>
+                <a class="cp-mobile-link" href="#matching">AI Matching</a>
+                <a class="cp-mobile-link" href="#categories">Categories</a>
+                <a class="cp-mobile-link" href="#digest">Daily Digest</a>
+                <a class="cp-mobile-link" href="#outreach">Outreach</a>
+                <a class="cp-mobile-link" href="#stack">Technology</a>
+                <a class="cp-mobile-link" href="#privacy">Privacy</a>
+                <a class="cp-mobile-link" href="#faq">FAQ</a>
+                <a href="/api/auth/linkedin" id="mobileAuthLink"
+                    class="cp-btn cp-btn-linkedin w-full mt-4 !min-h-[3rem]">
+                    <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                            d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                    </svg>
+                    <span id="mobileAuthLabel">Connect with LinkedIn</span>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main id="top">
+
+        <!-- ============ HERO ============ -->
+        <section class="cp-hero">
+            <div class="cp-shell grid lg:grid-cols-12 gap-12 items-center">
+                <div class="lg:col-span-7 space-y-6">
+                    <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-200 text-[11px] font-bold tracking-wide">
+                        <span class="cp-pulse-dot"></span>
+                        AI discovery · verification · matching · digest
+                    </div>
+
+                    <h1 class="cp-display text-[2.6rem] sm:text-6xl lg:text-7xl">CAREERPULSE</h1>
+
+                    <p class="text-xl sm:text-2xl font-semibold text-white tracking-tight">
+                        Your Personal Career Opportunity Agent
+                    </p>
+
+                    <p class="cp-lede text-sm sm:text-base max-w-xl">
+                        CareerPulse uses AI-powered web search and personalization to discover relevant jobs,
+                        internships, and technology opportunities so you spend less time searching and more time
+                        applying.
+                    </p>
+
+                    <div class="flex flex-col sm:flex-row gap-3 pt-1">
+                        <a href="/api/auth/linkedin" id="heroAuthLink"
+                            class="cp-btn cp-btn-linkedin w-full sm:w-auto">
+                            <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true">
+                                <path
+                                    d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                            </svg>
+                            <span id="heroAuthLabel">Connect with LinkedIn</span>
+                        </a>
+                        <a href="#about" id="knowMoreBtn" class="cp-btn cp-btn-ghost w-full sm:w-auto">
+                            Know More About CareerPulse
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </a>
+                    </div>
+
+                    <div class="flex flex-wrap gap-2 pt-2">
+                        <span class="cp-chip">Tavily Web Search</span>
+                        <span class="cp-chip">Gemini Analysis</span>
+                        <span class="cp-chip">LinkedIn OAuth</span>
+                        <span class="cp-chip">24-Hour Digest</span>
+                    </div>
+                </div>
+
+                <!-- Hero visual: pipeline preview -->
+                <div class="lg:col-span-5">
+                    <div class="cp-hero-panel">
+                        <div class="flex items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                            <p class="text-xs font-bold text-white">Discovery Pipeline</p>
+                            <span class="cp-chip">Live preview</span>
+                        </div>
+
+                        <div class="py-2">
+                            <div class="cp-hero-row">
+                                <span class="text-[11px] font-semibold text-slate-400">Tavily query</span>
+                                <span class="cp-mono text-[11px] text-sky-300">verify single openings</span>
+                            </div>
+                            <div class="cp-hero-row">
+                                <span class="text-[11px] font-semibold text-slate-400">Gemini</span>
+                                <span class="cp-mono text-[11px] text-indigo-300">extract required skills</span>
+                            </div>
+                            <div class="cp-hero-row">
+                                <span class="text-[11px] font-semibold text-slate-400">Matcher</span>
+                                <span class="cp-mono text-[11px] text-emerald-300">score + tier</span>
+                            </div>
+                            <div class="cp-hero-row">
+                                <span class="text-[11px] font-semibold text-slate-400">Output</span>
+                                <span class="cp-mono text-[11px] text-amber-300">dashboard + digest</span>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            <div class="cp-flow-node">Profile</div>
+                            <div class="cp-flow-arrow hidden sm:block">&rarr;</div>
+                            <div class="cp-flow-node">Discover</div>
+                            <div class="cp-flow-node">Verify</div>
+                            <div class="cp-flow-arrow hidden sm:block">&rarr;</div>
+                            <div class="cp-flow-node">Analyze</div>
+                            <div class="cp-flow-node">Match</div>
+                            <div class="cp-flow-arrow hidden sm:block">&rarr;</div>
+                            <div class="cp-flow-node">Notify</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ WHAT IS CAREERPULSE ============ -->
+        <section id="about" class="cp-section border-t border-slate-800/70">
+            <div class="cp-shell space-y-10">
+                <div class="max-w-3xl space-y-4">
+                    <span class="cp-eyebrow">Overview</span>
+                    <h2 class="cp-h2 text-3xl sm:text-4xl">What is CareerPulse?</h2>
+                    <p class="cp-lede text-sm sm:text-base">
+                        CareerPulse is an AI-powered personal career opportunity agent designed to help students and
+                        early-career professionals discover relevant internships, jobs, hackathons, workshops,
+                        competitions, and other career opportunities.
+                    </p>
+                    <p class="cp-lede text-sm sm:text-base">
+                        Instead of manually searching multiple websites every day, CareerPulse continuously searches
+                        publicly available information, analyzes opportunities, filters irrelevant results, matches
+                        them with your profile, and presents useful opportunities in one place.
+                    </p>
+                </div>
+
+                <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-2">Web Search</p>
+                        <p class="text-xs text-slate-400 leading-relaxed">Searches publicly available web sources for
+                            live openings instead of a static job database.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-2">Artificial Intelligence</p>
+                        <p class="text-xs text-slate-400 leading-relaxed">Reads the actual posting so job descriptions
+                            and requirements are understood, not guessed.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-2">Candidate Profiles</p>
+                        <p class="text-xs text-slate-400 leading-relaxed">Skills, roles, locations, and academic
+                            details you control form the matching baseline.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-2">Skill Matching</p>
+                        <p class="text-xs text-slate-400 leading-relaxed">Compares required and preferred skills to
+                            surface matched skills and gaps.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-2">Opportunity Verification</p>
+                        <p class="text-xs text-slate-400 leading-relaxed">Rejects listing pages, aggregators, expired
+                            posts, and duplicates where detectable.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-2">Automation</p>
+                        <p class="text-xs text-slate-400 leading-relaxed">Discovery and digest scheduling run without
+                            manual searching every day.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-2">Personalized Email Briefings</p>
+                        <p class="text-xs text-slate-400 leading-relaxed">A concise 24-hour digest of news and relevant
+                            opportunities delivered to your inbox.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-2">One Place</p>
+                        <p class="text-xs text-slate-400 leading-relaxed">Saved, interested, and waitlisted opportunities
+                            plus your profile live in a single dashboard.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ WHY BUILT ============ -->
+        <section id="why" class="cp-section border-t border-slate-800/70">
+            <div class="cp-shell grid lg:grid-cols-2 gap-10">
+                <div class="space-y-5">
+                    <span class="cp-eyebrow">The Problem</span>
+                    <h2 class="cp-h2 text-3xl sm:text-4xl">Why was CareerPulse built?</h2>
+                    <p class="cp-lede text-sm sm:text-base">
+                        Students often have to search across company career pages, job platforms, internship websites,
+                        technology communities, hackathon platforms, university websites, and startup websites — every
+                        day, in separate places.
+                    </p>
+                    <p class="cp-lede text-sm sm:text-base">
+                        CareerPulse was built to bring this process into one personalized system.
+                    </p>
+                </div>
+
+                <div class="grid sm:grid-cols-2 gap-3">
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-1.5">Too much time spent searching</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">Hours lost repeating the same searches
+                            across platforms.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-1.5">Opportunities spread everywhere</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">No single place shows what is currently
+                            open to you.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-1.5">Deadlines get missed</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">Short application windows are buried in
+                            feeds you rarely revisit.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-1.5">Irrelevant results everywhere</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">Generic listings dilute genuinely
+                            relevant openings.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-1.5">The same role repeats</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">One opportunity appears on many
+                            aggregator pages.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-1.5">Unclear fit</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">Hard to tell whether you actually match a
+                            role before applying.</p>
+                    </div>
+                    <div class="cp-card sm:col-span-2">
+                        <p class="text-xs font-bold text-white mb-1.5">News and opportunities are disconnected</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">Technology shifts that affect your career
+                            arrive separately from the openings they create.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ HOW IT WORKS ============ -->
+        <section id="how-it-works" class="cp-section border-t border-slate-800/70">
+            <div class="cp-shell space-y-10">
+                <div class="max-w-3xl space-y-4">
+                    <span class="cp-eyebrow">Pipeline</span>
+                    <h2 class="cp-h2 text-3xl sm:text-4xl">How CareerPulse works</h2>
+                    <p class="cp-lede text-sm sm:text-base">
+                        A seven-step path from your profile to a personalized daily briefing.
+                    </p>
+                </div>
+
+                <div class="grid lg:grid-cols-2 gap-4">
+                    <div class="cp-card">
+                        <div class="cp-step">
+                            <span class="cp-step-num">1</span>
+                            <div>
+                                <h3 class="text-sm font-bold text-white">Create Your Profile</h3>
+                                <p class="text-xs text-slate-400 mt-1 mb-2">You provide the context used for every
+                                    comparison.</p>
+                                <ul class="space-y-1.5">
+                                    <li class="cp-bullet"><span class="cp-bullet-dot"></span>Skills</li>
+                                    <li class="cp-bullet"><span class="cp-bullet-dot"></span>Interests</li>
+                                    <li class="cp-bullet"><span class="cp-bullet-dot"></span>Preferred roles</li>
+                                    <li class="cp-bullet"><span class="cp-bullet-dot"></span>Preferred locations</li>
+                                    <li class="cp-bullet"><span class="cp-bullet-dot"></span>Experience level</li>
+                                    <li class="cp-bullet"><span class="cp-bullet-dot"></span>Academic and profile
+                                        details used in outreach drafts</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="cp-card">
+                        <div class="cp-step">
+                            <span class="cp-step-num">2</span>
+                            <div>
+                                <h3 class="text-sm font-bold text-white">Discover Opportunities</h3>
+                                <p class="text-xs text-slate-400 mt-1">CareerPulse searches publicly available web
+                                    information using Tavily.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="cp-card">
+                        <div class="cp-step">
+                            <span class="cp-step-num">3</span>
+                            <div>
+                                <h3 class="text-sm font-bold text-white">Verify &amp; Extract</h3>
+                                <p class="text-xs text-slate-400 mt-1">CareerPulse analyzes the actual source pages and
+                                    extracts structured opportunity information.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="cp-card">
+                        <div class="cp-step">
+                            <span class="cp-step-num">4</span>
+                            <div>
+                                <h3 class="text-sm font-bold text-white">AI Analysis</h3>
+                                <p class="text-xs text-slate-400 mt-1 mb-2">Gemini helps understand:</p>
+                                <ul class="space-y-1.5">
+                                    <li class="cp-bullet"><span class="cp-bullet-dot"></span>Job descriptions</li>
+                                    <li class="cp-bullet"><span class="cp-bullet-dot"></span>Required skills</li>
+                                    <li class="cp-bullet"><span class="cp-bullet-dot"></span>Preferred skills</li>
+                                    <li class="cp-bullet"><span class="cp-bullet-dot"></span>Eligibility</li>
+                                    <li class="cp-bullet"><span class="cp-bullet-dot"></span>Opportunity
+                                        relevance</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="cp-card">
+                        <div class="cp-step">
+                            <span class="cp-step-num">5</span>
+                            <div>
+                                <h3 class="text-sm font-bold text-white">Personalized Matching</h3>
+                                <p class="text-xs text-slate-400 mt-1">CareerPulse compares the opportunity with the
+                                    candidate's profile.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="cp-card">
+                        <div class="cp-step">
+                            <span class="cp-step-num">6</span>
+                            <div>
+                                <h3 class="text-sm font-bold text-white">Dashboard</h3>
+                                <p class="text-xs text-slate-400 mt-1">Relevant opportunities are organized into the
+                                    CareerPulse dashboard.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="cp-card lg:col-span-2">
+                        <div class="cp-step">
+                            <span class="cp-step-num">7</span>
+                            <div>
+                                <h3 class="text-sm font-bold text-white">Daily Digest</h3>
+                                <p class="text-xs text-slate-400 mt-1">CareerPulse can send a personalized 24-hour email
+                                    digest containing major technology news and relevant career opportunities.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ CAREER OPPORTUNITIES ============ -->
+        <section id="opportunities" class="cp-section border-t border-slate-800/70">
+            <div class="cp-shell grid lg:grid-cols-2 gap-10">
+                <div class="space-y-5">
+                    <span class="cp-eyebrow">Discovery</span>
+                    <h2 class="cp-h2 text-3xl sm:text-4xl">Career Opportunities</h2>
+                    <p class="cp-lede text-sm sm:text-base">
+                        CareerPulse is built to discover specific, verifiable opportunities rather than generic
+                        job-listing pages.
+                    </p>
+                    <div class="flex flex-wrap gap-2 pt-1">
+                        <span class="cp-chip">Internships</span>
+                        <span class="cp-chip">Full-time jobs</span>
+                        <span class="cp-chip">Hackathons</span>
+                        <span class="cp-chip">Workshops</span>
+                        <span class="cp-chip">Competitions</span>
+                        <span class="cp-chip">Scholarships</span>
+                        <span class="cp-chip">Other career-related opportunities</span>
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    <div class="cp-card">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="cp-chip cp-chip-good">Valid</span>
+                            <span class="text-[11px] font-semibold text-slate-400">A specific, identifiable
+                                opportunity</span>
+                        </div>
+                        <p class="cp-mono text-xs text-emerald-200">"Software Engineer Intern — ABC Technologies —
+                            Mumbai"</p>
+                    </div>
+
+                    <div class="cp-card">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="cp-chip cp-chip-gap">Invalid</span>
+                            <span class="text-[11px] font-semibold text-slate-400">A generic aggregator or listing
+                                page</span>
+                        </div>
+                        <p class="cp-mono text-xs text-orange-200">"500 Software Engineer Jobs in India"</p>
+                    </div>
+
+                    <p class="text-[11px] text-slate-500 leading-relaxed">
+                        CareerPulse is designed to distinguish individual opportunities from job-listing and aggregator
+                        pages, and to drop duplicates and closed postings where that can be determined.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ AI MATCHING ============ -->
+        <section id="matching" class="cp-section border-t border-slate-800/70">
+            <div class="cp-shell space-y-10">
+                <div class="max-w-3xl space-y-4">
+                    <span class="cp-eyebrow">Matching</span>
+                    <h2 class="cp-h2 text-3xl sm:text-4xl">AI-Powered Matching</h2>
+                    <p class="cp-lede text-sm sm:text-base">
+                        CareerPulse compares the skills in your profile with the skills an opportunity actually
+                        requires.
+                    </p>
+                </div>
+
+                <div class="grid lg:grid-cols-5 gap-4">
+                    <div class="cp-card lg:col-span-2">
+                        <p class="text-xs font-bold text-white mb-3">Candidate</p>
+                        <div class="flex flex-wrap gap-2">
+                            <span class="cp-chip">Python</span>
+                            <span class="cp-chip">React</span>
+                            <span class="cp-chip">SQL</span>
+                            <span class="cp-chip">Machine Learning</span>
+                        </div>
+                    </div>
+
+                    <div class="cp-card lg:col-span-2">
+                        <p class="text-xs font-bold text-white mb-3">Opportunity</p>
+                        <div class="flex flex-wrap gap-2">
+                            <span class="cp-chip">Python</span>
+                            <span class="cp-chip">SQL</span>
+                            <span class="cp-chip">Machine Learning</span>
+                            <span class="cp-chip">AWS</span>
+                        </div>
+                    </div>
+
+                    <div class="cp-card lg:col-span-1">
+                        <p class="text-xs font-bold text-white mb-3">Result</p>
+                        <p class="text-[11px] font-semibold text-emerald-300 mb-1">Matched</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">Python, SQL, Machine Learning</p>
+                        <p class="text-[11px] font-semibold text-orange-300 mt-3 mb-1">Skill gap</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">AWS</p>
+                    </div>
+                </div>
+
+                <p class="cp-lede text-sm max-w-3xl">
+                    The goal is not simply to show jobs. It is to help you understand <strong class="text-white">why</strong>
+                    an opportunity may be relevant and <strong class="text-white">what skills may be missing</strong>
+                    before you spend time on it.
+                </p>
+            </div>
+        </section>
+
+        <!-- ============ CATEGORIES ============ -->
+        <section id="categories" class="cp-section border-t border-slate-800/70">
+            <div class="cp-shell space-y-10">
+                <div class="max-w-3xl space-y-4">
+                    <span class="cp-eyebrow">Classification</span>
+                    <h2 class="cp-h2 text-3xl sm:text-4xl">Opportunity Categories</h2>
+                    <p class="cp-lede text-sm sm:text-base">
+                        Every scored opportunity is placed into one of three existing categories based on the
+                        application's matching logic.
+                    </p>
+                </div>
+
+                <div class="grid md:grid-cols-3 gap-4">
+                    <div class="cp-card cp-tier-gold">
+                        <p class="text-2xl mb-2" aria-hidden="true">🥇</p>
+                        <h3 class="text-sm font-bold text-yellow-200 mb-1">Gold</h3>
+                        <p class="text-xs text-slate-300 leading-relaxed">Strong profile alignment — the majority of
+                            required skills are already present in your profile.</p>
+                    </div>
+                    <div class="cp-card cp-tier-silver">
+                        <p class="text-2xl mb-2" aria-hidden="true">🥈</p>
+                        <h3 class="text-sm font-bold text-slate-200 mb-1">Silver</h3>
+                        <p class="text-xs text-slate-300 leading-relaxed">Moderate alignment — partially matched, with
+                            gaps you could reasonably close.</p>
+                    </div>
+                    <div class="cp-card cp-tier-bronze">
+                        <p class="text-2xl mb-2" aria-hidden="true">🥉</p>
+                        <h3 class="text-sm font-bold text-orange-300 mb-1">Bronze</h3>
+                        <p class="text-xs text-slate-300 leading-relaxed">Lower alignment but potentially useful as
+                            stretch or awareness opportunities.</p>
+                    </div>
+                </div>
+
+                <p class="text-xs text-slate-500 leading-relaxed max-w-3xl">
+                    These categories are produced by the application's matching logic and are intended as guidance,
+                    not guarantees of selection, interviews, or offers.
+                </p>
+            </div>
+        </section>
+
+        <!-- ============ TECHNOLOGY NEWS DIGEST ============ -->
+        <section id="digest" class="cp-section border-t border-slate-800/70">
+            <div class="cp-shell grid lg:grid-cols-2 gap-10">
+                <div class="space-y-5">
+                    <span class="cp-eyebrow">24-Hour Digest</span>
+                    <h2 class="cp-h2 text-3xl sm:text-4xl">Technology News Digest</h2>
+                    <p class="cp-lede text-sm sm:text-base">
+                        CareerPulse can send one automated digest every 24 hours containing major technology
+                        developments from the previous 24 hours.
+                    </p>
+                    <p class="cp-lede text-sm sm:text-base">
+                        The system prioritizes genuinely significant stories rather than filling the email with
+                        trivial news, and includes verified source links where available.
+                    </p>
+                </div>
+
+                <div class="cp-card">
+                    <p class="text-xs font-bold text-white mb-3">Topics that may be included</p>
+                    <ul class="space-y-2 grid sm:grid-cols-2">
+                        <li class="cp-bullet"><span class="cp-bullet-dot"></span>Artificial intelligence</li>
+                        <li class="cp-bullet"><span class="cp-bullet-dot"></span>Major AI model releases</li>
+                        <li class="cp-bullet"><span class="cp-bullet-dot"></span>Software and developer platforms</li>
+                        <li class="cp-bullet"><span class="cp-bullet-dot"></span>Cybersecurity</li>
+                        <li class="cp-bullet"><span class="cp-bullet-dot"></span>Big Tech</li>
+                        <li class="cp-bullet"><span class="cp-bullet-dot"></span>Semiconductors</li>
+                        <li class="cp-bullet"><span class="cp-bullet-dot"></span>Hardware</li>
+                        <li class="cp-bullet"><span class="cp-bullet-dot"></span>Startups</li>
+                        <li class="cp-bullet"><span class="cp-bullet-dot"></span>Robotics</li>
+                        <li class="cp-bullet"><span class="cp-bullet-dot"></span>Space technology when significant</li>
+                        <li class="cp-bullet"><span class="cp-bullet-dot"></span>Major technology research</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ PERSONALIZED EMAIL ============ -->
+        <section id="email" class="cp-section border-t border-slate-800/70">
+            <div class="cp-shell space-y-10">
+                <div class="max-w-3xl space-y-4">
+                    <span class="cp-eyebrow">Briefings</span>
+                    <h2 class="cp-h2 text-3xl sm:text-4xl">Personalized Email</h2>
+                    <p class="cp-lede text-sm sm:text-base">
+                        CareerPulse can send personalized email briefings containing:
+                    </p>
+                </div>
+
+                <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-1.5">Major technology news</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">Significant developments from the previous
+                            24 hours.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-1.5">Relevant jobs</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">Verified openings aligned with your
+                            profile.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-1.5">Relevant internships</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">Internships that fit your skills and
+                            level.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-1.5">Matched skills</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">What you already bring to each
+                            opportunity.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-1.5">Missing skills</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">Gaps to close if the role interests
+                            you.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-1.5">Application links</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">Where the verified posting can be
+                            reached.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-1.5">Upcoming deadlines</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">Timing details captured from the
+                            posting.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-1.5">One concise briefing</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">No daily manual searching
+                            required.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ OUTREACH ============ -->
+        <section id="outreach" class="cp-section border-t border-slate-800/70">
+            <div class="cp-shell grid lg:grid-cols-2 gap-10 items-center">
+                <div class="space-y-5">
+                    <span class="cp-eyebrow">Direct Outreach</span>
+                    <h2 class="cp-h2 text-3xl sm:text-4xl">Email Drafts You Approve</h2>
+                    <p class="cp-lede text-sm sm:text-base">
+                        CareerPulse can help generate a professional outreach or application email based on a specific
+                        opportunity. You stay in control of every send.
+                    </p>
+                    <div class="cp-card border-amber-500/25 bg-amber-500/[0.06]">
+                        <p class="text-xs font-bold text-amber-200 mb-1.5">Important</p>
+                        <ul class="space-y-1.5">
+                            <li class="cp-bullet"><span class="cp-bullet-dot !bg-amber-400"></span>CareerPulse never
+                                automatically sends an email to a recruiter or company merely because a job was
+                                discovered.</li>
+                            <li class="cp-bullet"><span class="cp-bullet-dot !bg-amber-400"></span>You must explicitly
+                                approve sending.</li>
+                            <li class="cp-bullet"><span class="cp-bullet-dot !bg-amber-400"></span>Recruiter email
+                                addresses are never guessed — only publicly indexed contacts are surfaced.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="cp-card">
+                    <p class="text-xs font-bold text-white mb-4">Outreach flow</p>
+                    <div class="space-y-2">
+                        <div class="cp-flow-node !text-left !normal-case !tracking-normal !text-sm font-semibold">Opportunity</div>
+                        <p class="cp-flow-arrow">↓</p>
+                        <div class="cp-flow-node !text-left !normal-case !tracking-normal !text-sm font-semibold">Research</div>
+                        <p class="cp-flow-arrow">↓</p>
+                        <div class="cp-flow-node !text-left !normal-case !tracking-normal !text-sm font-semibold">Generate
+                            Email Draft</div>
+                        <p class="cp-flow-arrow">↓</p>
+                        <div class="cp-flow-node !text-left !normal-case !tracking-normal !text-sm font-semibold">User Reviews</div>
+                        <p class="cp-flow-arrow">↓</p>
+                        <div class="cp-flow-node !text-left !normal-case !tracking-normal !text-sm font-semibold">User Edits if
+                            Necessary</div>
+                        <p class="cp-flow-arrow">↓</p>
+                        <div
+                            class="cp-flow-node !text-left !normal-case !tracking-normal !text-sm font-semibold border-emerald-500/40 text-emerald-200">
+                            User Explicitly Sends</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ LINKEDIN ============ -->
+        <section id="linkedin" class="cp-section border-t border-slate-800/70">
+            <div class="cp-shell space-y-10">
+                <div class="max-w-3xl space-y-4">
+                    <span class="cp-eyebrow">Authentication</span>
+                    <h2 class="cp-h2 text-3xl sm:text-4xl">Connect with LinkedIn</h2>
+                    <p class="cp-lede text-sm sm:text-base">
+                        You can connect through LinkedIn to authenticate and retrieve the supported profile
+                        information returned by the authentication flow. CareerPulse only uses what that flow actually
+                        returns — it does not read your connections, messages, or private LinkedIn data.
+                    </p>
+                </div>
+
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-4">New user</p>
+                        <div class="space-y-2">
+                            <div class="cp-flow-node">LinkedIn</div>
+                            <p class="cp-flow-arrow">↓</p>
+                            <div class="cp-flow-node">Profile Setup</div>
+                            <p class="cp-flow-arrow">↓</p>
+                            <div class="cp-flow-node">CareerPulse Dashboard</div>
+                        </div>
+                    </div>
+
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-4">Existing user</p>
+                        <div class="space-y-2">
+                            <div class="cp-flow-node">LinkedIn</div>
+                            <p class="cp-flow-arrow">↓</p>
+                            <div class="cp-flow-node">CareerPulse Dashboard</div>
+                        </div>
+                    </div>
+                </div>
+
+                <a href="/api/auth/linkedin" id="linkedinCtaLink" class="cp-btn cp-btn-linkedin w-full sm:w-auto">
+                    <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                            d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                    </svg>
+                    <span id="linkedinCtaLabel">Connect with LinkedIn</span>
+                </a>
+            </div>
+        </section>
+
+        <!-- ============ WHY USE ============ -->
+        <section id="benefits" class="cp-section border-t border-slate-800/70">
+            <div class="cp-shell space-y-10">
+                <div class="max-w-3xl space-y-4">
+                    <span class="cp-eyebrow">Benefits</span>
+                    <h2 class="cp-h2 text-3xl sm:text-4xl">Why use CareerPulse?</h2>
+                </div>
+
+                <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div class="cp-card">
+                        <p class="text-xs font-extrabold tracking-widest text-sky-300 mb-2">SAVE TIME</p>
+                        <p class="text-xs text-slate-400 leading-relaxed">Reduce repetitive manual searching.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-extrabold tracking-widest text-indigo-300 mb-2">PERSONALIZED</p>
+                        <p class="text-xs text-slate-400 leading-relaxed">Opportunities are matched with the user's
+                            profile.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-extrabold tracking-widest text-violet-300 mb-2">AI-POWERED</p>
+                        <p class="text-xs text-slate-400 leading-relaxed">Use AI to understand job descriptions and
+                            technology information.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-extrabold tracking-widest text-emerald-300 mb-2">VERIFIED</p>
+                        <p class="text-xs text-slate-400 leading-relaxed">Filter irrelevant, duplicate, expired, and
+                            generic listing results where possible.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-extrabold tracking-widest text-amber-300 mb-2">ONE PLACE</p>
+                        <p class="text-xs text-slate-400 leading-relaxed">Manage opportunities and profile information
+                            through one platform.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-extrabold tracking-widest text-rose-300 mb-2">DAILY AWARENESS</p>
+                        <p class="text-xs text-slate-400 leading-relaxed">Receive a concise technology and career digest
+                            every 24 hours.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ WORKFLOW VISUAL ============ -->
+        <section id="workflow" class="cp-section border-t border-slate-800/70">
+            <div class="cp-shell space-y-10">
+                <div class="max-w-3xl space-y-4">
+                    <span class="cp-eyebrow">Product Workflow</span>
+                    <h2 class="cp-h2 text-3xl sm:text-4xl">From profile to notification</h2>
+                </div>
+
+                <div class="cp-card">
+                    <div class="grid sm:grid-cols-2 lg:grid-cols-7 gap-3 text-center">
+                        <div>
+                            <div class="cp-flow-node">Profile</div>
+                            <p class="text-[11px] text-slate-400 mt-2 leading-relaxed">You define skills, roles, and
+                                locations.</p>
+                        </div>
+                        <div class="self-center cp-flow-arrow lg:hidden">&darr;</div>
+                        <div>
+                            <div class="cp-flow-node">Discover</div>
+                            <p class="text-[11px] text-slate-400 mt-2 leading-relaxed">Web search finds candidate
+                                openings.</p>
+                        </div>
+                        <div class="self-center cp-flow-arrow lg:hidden">&darr;</div>
+                        <div>
+                            <div class="cp-flow-node">Verify</div>
+                            <p class="text-[11px] text-slate-400 mt-2 leading-relaxed">Listings and duplicates are
+                                rejected.</p>
+                        </div>
+                        <div class="self-center cp-flow-arrow lg:hidden">&darr;</div>
+                        <div>
+                            <div class="cp-flow-node">Analyze</div>
+                            <p class="text-[11px] text-slate-400 mt-2 leading-relaxed">AI extracts requirements from the
+                                source.</p>
+                        </div>
+                        <div class="self-center cp-flow-arrow lg:hidden">&darr;</div>
+                        <div>
+                            <div class="cp-flow-node">Match</div>
+                            <p class="text-[11px] text-slate-400 mt-2 leading-relaxed">Your profile is scored against the
+                                role.</p>
+                        </div>
+                        <div class="self-center cp-flow-arrow lg:hidden">&darr;</div>
+                        <div>
+                            <div class="cp-flow-node">Track</div>
+                            <p class="text-[11px] text-slate-400 mt-2 leading-relaxed">Save as interested or waitlisted
+                                in the dashboard.</p>
+                        </div>
+                        <div class="self-center cp-flow-arrow lg:hidden">&darr;</div>
+                        <div>
+                            <div class="cp-flow-node">Notify</div>
+                            <p class="text-[11px] text-slate-400 mt-2 leading-relaxed">A 24-hour digest delivers the
+                                briefing.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ PRIVACY ============ -->
+        <section id="privacy" class="cp-section border-t border-slate-800/70">
+            <div class="cp-shell grid lg:grid-cols-2 gap-10">
+                <div class="space-y-5">
+                    <span class="cp-eyebrow">Privacy &amp; Security</span>
+                    <h2 class="cp-h2 text-3xl sm:text-4xl">Responsible handling of credentials and data</h2>
+                    <p class="cp-lede text-sm sm:text-base">
+                        How CareerPulse handles configuration and user information in its current implementation.
+                    </p>
+                </div>
+
+                <div class="grid sm:grid-cols-2 gap-3">
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-1.5">API keys stay on the backend</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">Search and AI keys are read server-side
+                            and never shipped to the browser.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-1.5">SMTP credentials are not exposed</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">Mail credentials are used only by the
+                            backend mail service.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-1.5">OAuth handled server-side</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">The authentication exchange happens on
+                            the server; the browser only receives a session.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-1.5">Public web information only</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">Opportunity and news discovery uses
+                            publicly available sources.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-1.5">You control your profile</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">Profile fields are editable and are stored
+                            against your own account.</p>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-white mb-1.5">No automatic outreach sends</p>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">Outreach emails are only sent after your
+                            explicit approval.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ TECHNOLOGY STACK ============ -->
+        <section id="stack" class="cp-section border-t border-slate-800/70">
+            <div class="cp-shell space-y-10">
+                <div class="max-w-3xl space-y-4">
+                    <span class="cp-eyebrow">Technology</span>
+                    <h2 class="cp-h2 text-3xl sm:text-4xl">Technology Stack</h2>
+                </div>
+
+                <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-sky-300 mb-3">Frontend</p>
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="cp-chip">HTML</span>
+                            <span class="cp-chip">Tailwind CSS</span>
+                            <span class="cp-chip">JavaScript</span>
+                        </div>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-indigo-300 mb-3">Backend</p>
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="cp-chip">Python</span>
+                            <span class="cp-chip">FastAPI</span>
+                        </div>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-emerald-300 mb-3">Database</p>
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="cp-chip">Supabase</span>
+                            <span class="cp-chip">PostgreSQL</span>
+                        </div>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-violet-300 mb-3">AI</p>
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="cp-chip">Google Gemini</span>
+                        </div>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-cyan-300 mb-3">Web Search</p>
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="cp-chip">Tavily</span>
+                        </div>
+                    </div>
+                    <div class="cp-card">
+                        <p class="text-xs font-bold text-blue-300 mb-3">Authentication</p>
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="cp-chip">LinkedIn OAuth</span>
+                        </div>
+                    </div>
+                    <div class="cp-card sm:col-span-2">
+                        <p class="text-xs font-bold text-amber-300 mb-3">Email</p>
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="cp-chip">Gmail SMTP</span>
+                            <span class="cp-chip">MIME</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ FAQ ============ -->
+        <section id="faq" class="cp-section border-t border-slate-800/70">
+            <div class="cp-shell space-y-8">
+                <div class="max-w-3xl space-y-4">
+                    <span class="cp-eyebrow">FAQ</span>
+                    <h2 class="cp-h2 text-3xl sm:text-4xl">Frequently asked questions</h2>
+                </div>
+
+                <div class="max-w-3xl space-y-2">
+                    <div class="cp-faq-item">
+                        <button type="button" class="cp-faq-q" aria-expanded="false">
+                            <span>What is CareerPulse?</span>
+                            <span class="cp-faq-icon text-lg leading-none">+</span>
+                        </button>
+                        <div class="cp-faq-a">CareerPulse is an AI-powered personal career opportunity agent. It
+                            searches publicly available web information, verifies and extracts specific opportunities,
+                            matches them against your profile, and can send a personalized 24-hour digest.</div>
+                    </div>
+
+                    <div class="cp-faq-item">
+                        <button type="button" class="cp-faq-q" aria-expanded="false">
+                            <span>Who is CareerPulse designed for?</span>
+                            <span class="cp-faq-icon text-lg leading-none">+</span>
+                        </button>
+                        <div class="cp-faq-a">Primarily students and early-career professionals looking for
+                            internships, entry-level roles, hackathons, workshops, competitions, and related
+                            opportunities.</div>
+                    </div>
+
+                    <div class="cp-faq-item">
+                        <button type="button" class="cp-faq-q" aria-expanded="false">
+                            <span>How does CareerPulse find opportunities?</span>
+                            <span class="cp-faq-icon text-lg leading-none">+</span>
+                        </button>
+                        <div class="cp-faq-a">It uses the Tavily search API to query publicly available web sources,
+                            then reads the source pages to extract structured opportunity details instead of relying on
+                            a static job database.</div>
+                    </div>
+
+                    <div class="cp-faq-item">
+                        <button type="button" class="cp-faq-q" aria-expanded="false">
+                            <span>How does AI help with job matching?</span>
+                            <span class="cp-faq-icon text-lg leading-none">+</span>
+                        </button>
+                        <div class="cp-faq-a">Gemini reads the posting to identify required skills, preferred
+                            skills, and whether the page describes a single active opportunity. Those requirements are
+                            then compared with your saved profile skills to produce a match score, tier, matched skills,
+                            and missing skills.</div>
+                    </div>
+
+                    <div class="cp-faq-item">
+                        <button type="button" class="cp-faq-q" aria-expanded="false">
+                            <span>Does CareerPulse show every job it finds?</span>
+                            <span class="cp-faq-icon text-lg leading-none">+</span>
+                        </button>
+                        <div class="cp-faq-a">No. Results are filtered where possible: listing and aggregator pages,
+                            duplicates, expired postings, and HTML-contaminated titles are rejected before an
+                            opportunity reaches your dashboard.</div>
+                    </div>
+
+                    <div class="cp-faq-item">
+                        <button type="button" class="cp-faq-q" aria-expanded="false">
+                            <span>Does CareerPulse send daily emails?</span>
+                            <span class="cp-faq-icon text-lg leading-none">+</span>
+                        </button>
+                        <div class="cp-faq-a">It can send one automated digest per 24-hour window, and there is also a
+                            manual trigger in the dashboard. The digest contains verified technology news and relevant
+                            opportunities. Repeat sends within the same window are skipped.</div>
+                    </div>
+
+                    <div class="cp-faq-item">
+                        <button type="button" class="cp-faq-q" aria-expanded="false">
+                            <span>Can I edit my profile?</span>
+                            <span class="cp-faq-icon text-lg leading-none">+</span>
+                        </button>
+                        <div class="cp-faq-a">Yes. The Candidate Profile section lets you update your headline,
+                            degree, college, year, location, GitHub and LinkedIn links, projects, and skills. Saved
+                            skills are what matching uses.</div>
+                    </div>
+
+                    <div class="cp-faq-item">
+                        <button type="button" class="cp-faq-q" aria-expanded="false">
+                            <span>Can CareerPulse automatically contact recruiters?</span>
+                            <span class="cp-faq-icon text-lg leading-none">+</span>
+                        </button>
+                        <div class="cp-faq-a">No. CareerPulse can draft an outreach email for you, but it is never sent
+                            automatically. You review it, edit it if needed, and explicitly send it yourself. Contact
+                            details are only shown when publicly indexed — addresses are never guessed.</div>
+                    </div>
+
+                    <div class="cp-faq-item">
+                        <button type="button" class="cp-faq-q" aria-expanded="false">
+                            <span>How do I connect my LinkedIn account?</span>
+                            <span class="cp-faq-icon text-lg leading-none">+</span>
+                        </button>
+                        <div class="cp-faq-a">Click any “Connect with LinkedIn” button on this page. You are redirected
+                            to LinkedIn, authenticate, and are returned to CareerPulse. New users land on profile setup;
+                            existing users go straight to the dashboard.</div>
+                    </div>
+
+                    <div class="cp-faq-item">
+                        <button type="button" class="cp-faq-q" aria-expanded="false">
+                            <span>Is CareerPulse free?</span>
+                            <span class="cp-faq-icon text-lg leading-none">+</span>
+                        </button>
+                        <div class="cp-faq-a">CareerPulse does not present a paid plan on this site. It is an
+                            actively developed project, so treat pricing and availability as subject to change rather
+                            than a committed commercial offer.</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ FINAL CTA ============ -->
+        <section id="cta" class="cp-section border-t border-slate-800/70">
+            <div class="cp-shell">
+                <div class="cp-card !rounded-3xl text-center px-6 py-12 sm:px-12 sm:py-16">
+                    <h2 class="cp-h2 text-3xl sm:text-4xl mb-3">Your next opportunity could already be out there.</h2>
+                    <p class="cp-lede text-sm sm:text-base mb-8">Let CareerPulse find it.</p>
+                    <div class="flex flex-col sm:flex-row gap-3 justify-center">
+                        <a href="/api/auth/linkedin" id="finalAuthLink" class="cp-btn cp-btn-linkedin w-full sm:w-auto">
+                            <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true">
+                                <path
+                                    d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
+                            </svg>
+                            <span id="finalAuthLabel">Connect with LinkedIn</span>
+                        </a>
+                        <a href="#about" class="cp-btn cp-btn-ghost w-full sm:w-auto">Explore CareerPulse</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ============ FOOTER ============ -->
+    <footer class="border-t border-slate-800/70 bg-slate-950/60">
+        <div class="cp-shell py-12 space-y-10">
+            <div class="grid md:grid-cols-3 gap-8">
+                <div class="space-y-3">
+                    <div class="flex items-center gap-3">
+                        <span class="cp-brand-mark">CP</span>
+                        <span class="text-sm font-extrabold tracking-tight text-white">CareerPulse</span>
+                    </div>
+                    <p class="text-xs text-slate-400 leading-relaxed max-w-xs">Your Personal Career Opportunity Agent</p>
+                    <div class="flex flex-wrap gap-1.5 pt-1">
+                        <span class="cp-chip !text-[10px]">HTML</span>
+                        <span class="cp-chip !text-[10px]">Tailwind CSS</span>
+                        <span class="cp-chip !text-[10px]">JavaScript</span>
+                        <span class="cp-chip !text-[10px]">Python</span>
+                        <span class="cp-chip !text-[10px]">FastAPI</span>
+                        <span class="cp-chip !text-[10px]">Supabase</span>
+                        <span class="cp-chip !text-[10px]">PostgreSQL</span>
+                        <span class="cp-chip !text-[10px]">Gemini</span>
+                        <span class="cp-chip !text-[10px]">Tavily</span>
+                        <span class="cp-chip !text-[10px]">LinkedIn OAuth</span>
+                        <span class="cp-chip !text-[10px]">Gmail SMTP</span>
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    <p class="text-xs font-bold text-white">Team</p>
+                    <ul class="space-y-1.5">
+                        <li class="text-xs text-slate-400">Jeshurun Selvakumar</li>
+                        <li class="text-xs text-slate-400">Ojas Joshi</li>
+                        <li class="text-xs text-slate-400">Kshitij Jadhav</li>
+                    </ul>
+                    <p class="text-xs text-slate-400 pt-2">MIT License</p>
+                </div>
+
+                <div class="space-y-3">
+                    <p class="text-xs font-bold text-white">Sections</p>
+                    <ul class="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                        <li><a class="cp-footer-link" href="#about">Overview</a></li>
+                        <li><a class="cp-footer-link" href="#why">Why Built</a></li>
+                        <li><a class="cp-footer-link" href="#how-it-works">How It Works</a></li>
+                        <li><a class="cp-footer-link" href="#opportunities">Opportunities</a></li>
+                        <li><a class="cp-footer-link" href="#matching">AI Matching</a></li>
+                        <li><a class="cp-footer-link" href="#categories">Categories</a></li>
+                        <li><a class="cp-footer-link" href="#digest">Daily Digest</a></li>
+                        <li><a class="cp-footer-link" href="#outreach">Outreach</a></li>
+                        <li><a class="cp-footer-link" href="#linkedin">LinkedIn</a></li>
+                        <li><a class="cp-footer-link" href="#privacy">Privacy</a></li>
+                        <li><a class="cp-footer-link" href="#stack">Technology</a></li>
+                        <li><a class="cp-footer-link" href="#faq">FAQ</a></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="pt-6 border-t border-slate-800/70 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <p class="text-[11px] text-slate-500">© CareerPulse. MIT License.</p>
+                <p class="text-[11px] text-slate-500">Matches and tiers are guidance, not guarantees of selection.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="/static/landing.js"></script>
+</body>
+
+</html>

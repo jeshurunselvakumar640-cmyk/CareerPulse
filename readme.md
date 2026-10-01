@@ -150,6 +150,11 @@ Open the application:
 http://127.0.0.1:8000/
 ```
 
+| Route     | Description                                        |
+| --------- | -------------------------------------------------- |
+| `/`       | Public landing page (no authentication required)    |
+| `/app`    | Authenticated dashboard app (LinkedIn sign-in)      |
+
 API documentation:
 
 ```text

@@ -202,16 +202,47 @@ async def linkedin_login():
 async def auth_callback(code: str):
     try:
         res = supabase.auth.exchange_code_for_session({"auth_code": code})
-        response = RedirectResponse(url="/#dashboard")
-        response.set_cookie(key="sb-access-token", value=res.session.access_token, httponly=True)
+        session = res.session
+        user = res.user
+
+        # Determine new vs existing user based on profile completeness
+        # A user with no skills in their metadata is considered new
+        is_new_user = True
+        try:
+            metadata = user.user_metadata or {} if user else {}
+            skills = metadata.get("skills") or []
+            # If the user has skills saved, they have completed their profile before
+            if skills and len(skills) > 0:
+                is_new_user = False
+        except Exception:
+            is_new_user = True
+
+        redirect_hash = "profile" if is_new_user else "dashboard"
+        response = RedirectResponse(url=f"/app#{redirect_hash}")
+        response.set_cookie(
+            key="sb-access-token",
+            value=session.access_token,
+            httponly=True,
+            samesite="lax",
+            path="/"
+        )
         return response
-    except Exception:
-        return RedirectResponse(url="/#login?error=auth_failed")
+    except Exception as e:
+        logger.error("OAuth callback error: %s", str(e))
+        return RedirectResponse(url="/?error=auth_failed")
 
 @app.get("/api/auth/logout")
-async def logout():
+async def logout_get():
+    """GET logout — clears cookie and redirects to root."""
     response = RedirectResponse(url="/")
-    response.delete_cookie(key="sb-access-token")
+    response.delete_cookie(key="sb-access-token", path="/")
+    return response
+
+@app.post("/api/auth/logout")
+async def logout_post():
+    """POST logout — clears cookie and returns JSON success for frontend-driven redirect."""
+    response = JSONResponse(content={"status": "success", "message": "Logged out successfully"})
+    response.delete_cookie(key="sb-access-token", path="/")
     return response
 
 @app.get("/api/user/profile")
@@ -235,30 +266,34 @@ async def get_user_profile(request: Request, authorization: Optional[str] = Head
     }
 
     if not user:
-        return {"authenticated": False, "profile": default_profile}
+        return {"authenticated": False, "profile_complete": False, "profile": default_profile}
 
     try:
         metadata = user.user_metadata or {}
+        skills = metadata.get("skills") or []
+        profile_complete = bool(skills and len(skills) > 0)
         return {
             "authenticated": True,
+            "profile_complete": profile_complete,
             "profile": {
                 "name": metadata.get("full_name") or metadata.get("name") or default_profile["name"],
                 "email": user.email or default_profile["email"],
-                "profile_picture": metadata.get("avatar_url") or metadata.get("picture") or default_profile["profile_picture"],
+                "profile_picture": metadata.get("avatar_url") or metadata.get("picture") or "",
                 "headline": metadata.get("headline") or default_profile["headline"],
                 "degree": metadata.get("degree") or default_profile["degree"],
                 "college": metadata.get("college") or default_profile["college"],
                 "year": metadata.get("year") or default_profile["year"],
                 "location": metadata.get("location") or default_profile["location"],
                 "experience": "Student / Internship",
-                "skills": metadata.get("skills") or default_profile["skills"],
+                "skills": skills if skills else default_profile["skills"],
                 "github": metadata.get("github") or default_profile["github"],
                 "linkedin": metadata.get("linkedin") or default_profile["linkedin"],
                 "projects": metadata.get("projects") or default_profile["projects"]
             }
         }
-    except Exception:
-        return {"authenticated": False, "profile": default_profile}
+    except Exception as e:
+        logger.error("Profile fetch error: %s", str(e))
+        return {"authenticated": False, "profile_complete": False, "profile": default_profile}
 
 @app.post("/api/user/profile/update")
 async def update_user_profile(req: ProfileUpdateRequest, auth_tuple=Depends(require_auth_token_and_user)):
@@ -588,10 +623,31 @@ frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
 if os.path.exists(frontend_path):
     app.mount("/static", StaticFiles(directory=frontend_path), name="static")
 
+
+def _serve_frontend_file(filename: str):
+    from fastapi.responses import FileResponse
+    target = os.path.join(frontend_path, filename)
+    if os.path.exists(target):
+        return FileResponse(target)
+    return None
+
+
 @app.get("/")
-async def serve_index():
-    index_file = os.path.join(frontend_path, "index.html")
-    if os.path.exists(index_file):
-        from fastapi.responses import FileResponse
-        return FileResponse(index_file)
+async def serve_landing():
+    """Public landing page. Accessible without authentication."""
+    response = _serve_frontend_file("landing.html")
+    if response is not None:
+        # Public marketing page: never cache a stale authenticated shell.
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    return JSONResponse(content={"status": "CareerPulse API active"}, status_code=200)
+
+
+@app.get("/app")
+async def serve_dashboard_app():
+    """Authenticated single-page application shell (dashboard, profile, opportunities)."""
+    response = _serve_frontend_file("index.html")
+    if response is not None:
+        response.headers["Cache-Control"] = "no-store"
+        return response
     return JSONResponse(content={"status": "CareerPulse API active"}, status_code=200)

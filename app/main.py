@@ -188,11 +188,15 @@ async def supabase_health():
         return {"status": "error", "detail": str(e)}
 
 @app.get("/api/auth/linkedin")
-async def linkedin_login():
+async def linkedin_login(request: Request):
     try:
+        # Automatically detects whether running locally or on Vercel
+        base_url = str(request.base_url).rstrip("/")
+        redirect_uri = f"{base_url}/api/auth/callback"
+        
         res = supabase.auth.sign_in_with_oauth({
             "provider": "linkedin_oidc",
-            "options": {"redirect_to": "http://127.0.0.1:8000/api/auth/callback"}
+            "options": {"redirect_to": redirect_uri}
         })
         return RedirectResponse(url=res.url)
     except Exception as e:
@@ -254,15 +258,15 @@ async def get_user_profile(request: Request, authorization: Optional[str] = Head
         "email": "jeshurunselvakumar640@gmail.com",
         "profile_picture": "",
         "headline": "Computer Engineering Student | SIES Graduate School of Technology",
-        "degree": "B.E. Computer Engineering",
+        "degree": "B.Tech Computer Engineering",
         "college": "SIES Graduate School of Technology",
-        "year": "Final Year (Semester 7)",
+        "year": "Second Year (Semester 3)",
         "location": "Mumbai / Navi Mumbai",
         "experience": "Student / Internship",
         "skills": ["Python", "Java", "C", "React", "JavaScript", "SQL", "FastAPI"],
         "github": "https://github.com/JeshurunSelvakumar",
         "linkedin": "https://linkedin.com/in/jeshurun-selvakumar",
-        "projects": ["CareerPulse AI Agent", "Chordician Application"]
+        "projects": ["CareerPulse AI Agent", "Chordician Application", "PhysiX"]
     }
 
     if not user:
@@ -424,11 +428,11 @@ async def generate_email_draft(req: EmailDraftRequest, request: Request, authori
     
     user_data = {
         "name": "Jeshurun Selvakumar",
-        "degree": "B.E. Computer Engineering",
+        "degree": "B.Tech Computer Engineering",
         "college": "SIES Graduate School of Technology",
-        "year": "Final Year",
+        "year": "Second Year",
         "skills": ["Python", "Java", "C", "React", "JavaScript", "SQL", "FastAPI"],
-        "projects": ["CareerPulse AI Agent", "Chordician Application"],
+        "projects": ["CareerPulse AI Agent", "Chordician Application", "PhysiX"],
         "github": "https://github.com/JeshurunSelvakumar",
         "linkedin": "https://linkedin.com/in/jeshurun-selvakumar",
         "location": "Mumbai / Navi Mumbai"

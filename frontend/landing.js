@@ -1,12 +1,45 @@
 /* CareerPulse public landing page interactions */
 
 document.addEventListener("DOMContentLoaded", () => {
+    initLogo();
     initMobileNav();
     initFaq();
     initReveal();
     resolveAuthState();
     showAuthNotice();
 });
+
+/* ---------- brand logo ---------- */
+
+function initLogo() {
+    document.querySelectorAll("[data-logo-tile]").forEach(tile => {
+        const img = tile.querySelector("[data-logo-img]");
+        const fallback = tile.querySelector("[data-logo-fallback]");
+        if (!img) return;
+
+        const apply = () => {
+            // Only swap once the asset actually decoded.
+            tile.classList.add("has-logo");
+            if (fallback) fallback.style.display = "none";
+        };
+
+        // The image may already be cached and complete before this runs,
+        // in which case "load" has fired and will never fire again.
+        if (img.complete && img.naturalWidth > 0) apply();
+
+        img.addEventListener("load", apply);
+
+        // If the file is missing the img never fires "load", so the
+        // "CP" initials simply stay visible — no broken-image icon.
+    });
+
+    // Optional horizontal wordmark next to the tile (set true in HTML if added).
+    document.querySelectorAll("[data-logo-wordmark]").forEach(img => {
+        const apply = () => img.classList.add("loaded");
+        if (img.complete && img.naturalWidth > 0) apply();
+        img.addEventListener("load", apply);
+    });
+}
 
 /* ---------- mobile navigation ---------- */
 

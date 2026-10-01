@@ -27,6 +27,8 @@ function escapeHtml(text) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+    initBrandLogo();
+
     // Hide both containers initially while auth resolves
     const unauthEl = document.getElementById("unauthContainer");
     const authEl = document.getElementById("authContainer");
@@ -43,6 +45,21 @@ document.addEventListener("DOMContentLoaded", () => {
         logoutBtn.addEventListener("click", handleLogout);
     }
 });
+
+/**
+ * Swaps the "CP" initials tile for the CareerPulse logo image once it loads.
+ * A missing asset simply leaves the initials visible.
+ */
+function initBrandLogo() {
+    document.querySelectorAll(".cp-app-logo").forEach(tile => {
+        const img = tile.querySelector("[data-app-logo-img]");
+        if (!img) return;
+        if (img.complete && img.naturalWidth > 0) {
+            tile.classList.add("has-logo");
+        }
+        img.addEventListener("load", () => tile.classList.add("has-logo"));
+    });
+}
 
 // Session Token Retrieval & Refresh Helper
 async function getAuthHeader() {

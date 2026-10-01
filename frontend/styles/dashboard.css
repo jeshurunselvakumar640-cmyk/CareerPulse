@@ -56,6 +56,35 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+/* Brand logo tile. The image is hidden until it loads, so a missing
+   asset keeps showing the "CP" initials instead of a broken icon. */
+.cp-app-logo {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, #4f46e5, #0ea5e9);
+}
+
+.cp-app-logo-img {
+    display: none;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: center;
+}
+
+.cp-app-logo.has-logo {
+    background: transparent;
+    box-shadow: none;
+}
+
+.cp-app-logo.has-logo .cp-app-logo-img {
+    display: block;
+}
+
+.cp-app-logo.has-logo [data-app-logo-fallback] {
+    display: none;
+}
+
 @keyframes swipeDown {
     0% {
         transform: translateY(0) scale(1);

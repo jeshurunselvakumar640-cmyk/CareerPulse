@@ -18,6 +18,7 @@
             }
         }
     </script>
+    <link rel="stylesheet" href="/static/styles/dashboard.css">
     <style>
         @keyframes swipeRight {
             0% {
@@ -118,8 +119,10 @@
                 <!-- Logo & Brand -->
                 <div class="flex items-center gap-3">
                     <div
-                        class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center font-bold text-lg text-white shadow-lg shadow-indigo-600/30">
-                        CP</div>
+                        class="cp-app-logo w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center font-bold text-lg text-white shadow-lg shadow-indigo-600/30">
+                        <span data-app-logo-fallback>CP</span>
+                        <img class="cp-app-logo-img" data-app-logo-img src="/static/assets/logo.png" alt="">
+                    </div>
                     <div>
                         <h1 class="text-sm font-bold tracking-tight text-white">CareerPulse</h1>
                         <p class="text-[10px] text-slate-400 font-medium">AI Career Agent</p>

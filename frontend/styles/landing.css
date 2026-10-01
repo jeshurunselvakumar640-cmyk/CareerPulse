@@ -307,6 +307,40 @@ body.cp-body {
     color: #ffffff;
     background: linear-gradient(135deg, #4f46e5, #0ea5e9);
     box-shadow: 0 12px 30px -14px rgba(56, 189, 248, 0.9);
+    overflow: hidden;
+    flex: none;
+}
+
+/* Logo image replaces the "CP" initials tile. Hidden until the asset loads,
+   so a missing file falls back to the initials instead of a broken icon. */
+.cp-logo-img {
+    display: none;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: center;
+    border-radius: 0.75rem;
+}
+
+.cp-brand-mark.has-logo {
+    background: transparent;
+    box-shadow: none;
+}
+
+.cp-brand-mark.has-logo .cp-logo-img {
+    display: block;
+}
+
+.cp-logo-wordmark {
+    display: none;
+    height: 1.75rem;
+    width: auto;
+    object-fit: contain;
+    object-position: left center;
+}
+
+.cp-logo-wordmark.loaded {
+    display: block;
 }
 
 .cp-mobile-menu {

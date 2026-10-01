@@ -1,3 +1,4 @@
+from fastapi.responses import FileResponse
 import os
 import re
 import json
@@ -52,7 +53,7 @@ supabase: Client = create_client(settings.supabase_url, settings.supabase_key)
 # -------------------------------------------------------------------
 
 async def daily_5am_loop():
-    """Calculates time until next 5:00 AM IST and executes the daily digest automatically."""
+    """Calculates time until next 5:00 AM IST and executes the daily digest automatically across users."""
     tz = zoneinfo.ZoneInfo("Asia/Kolkata")
     
     while True:
@@ -69,17 +70,23 @@ async def daily_5am_loop():
         
         logger.info("⏰ Executing automated daily digest email dispatch at 5:00 AM IST...")
         try:
-            user_profile = {
-                "user_id": "candidate_default_user",
-                "name": "Jeshurun Selvakumar",
-                "email": settings.smtp_user or "jeshurunselvakumar640@gmail.com",
-                "skills": ["Python", "Java", "C", "React", "JavaScript", "SQL", "FastAPI"],
-                "locations": ["Mumbai", "Navi Mumbai", "Remote"],
-                "roles": ["Software Engineer Intern", "Backend Developer Intern", "AI ML Intern"]
-            }
-            # force=False enforces strict 24-hour idempotency check
-            result = await send_daily_digest(user_profile, force=False)
-            logger.info("Automated 5:00 AM Digest Dispatch Result: %s", result)
+            # Query all registered user profiles from Supabase
+            profiles_res = supabase.table("user_profiles").select("*").execute()
+            profiles = profiles_res.data or []
+
+            for profile in profiles:
+                if not profile.get("email"):
+                    continue
+                user_profile = {
+                    "user_id": profile.get("id") or profile.get("user_id"),
+                    "name": profile.get("full_name") or profile.get("name", "User"),
+                    "email": profile["email"],
+                    "skills": profile.get("skills", []),
+                    "locations": profile.get("locations", ["Remote"]),
+                    "roles": profile.get("roles", ["Software Engineer"])
+                }
+                result = await send_daily_digest(user_profile, force=False)
+                logger.info(f"Automated 5:00 AM Digest result for {profile['email']}: {result}")
         except Exception as e:
             logger.error("Failed to execute scheduled 5:00 AM digest: %s", str(e))
 
@@ -190,7 +197,6 @@ async def supabase_health():
 @app.get("/api/auth/linkedin")
 async def linkedin_login(request: Request):
     try:
-        # Automatically detects whether running locally or on Vercel
         base_url = str(request.base_url).rstrip("/")
         redirect_uri = f"{base_url}/api/auth/callback"
         
@@ -209,13 +215,10 @@ async def auth_callback(code: str):
         session = res.session
         user = res.user
 
-        # Determine new vs existing user based on profile completeness
-        # A user with no skills in their metadata is considered new
         is_new_user = True
         try:
             metadata = user.user_metadata or {} if user else {}
             skills = metadata.get("skills") or []
-            # If the user has skills saved, they have completed their profile before
             if skills and len(skills) > 0:
                 is_new_user = False
         except Exception:
@@ -237,14 +240,12 @@ async def auth_callback(code: str):
 
 @app.get("/api/auth/logout")
 async def logout_get():
-    """GET logout — clears cookie and redirects to root."""
     response = RedirectResponse(url="/")
     response.delete_cookie(key="sb-access-token", path="/")
     return response
 
 @app.post("/api/auth/logout")
 async def logout_post():
-    """POST logout — clears cookie and returns JSON success for frontend-driven redirect."""
     response = JSONResponse(content={"status": "success", "message": "Logged out successfully"})
     response.delete_cookie(key="sb-access-token", path="/")
     return response
@@ -253,24 +254,24 @@ async def logout_post():
 async def get_user_profile(request: Request, authorization: Optional[str] = Header(None)):
     _, user = get_current_token_and_user(request, authorization)
     
-    default_profile = {
-        "name": "Jeshurun Selvakumar",
-        "email": "jeshurunselvakumar640@gmail.com",
+    empty_profile = {
+        "name": "",
+        "email": "",
         "profile_picture": "",
-        "headline": "Computer Engineering Student | SIES Graduate School of Technology",
-        "degree": "B.Tech Computer Engineering",
-        "college": "SIES Graduate School of Technology",
-        "year": "Second Year (Semester 3)",
-        "location": "Mumbai / Navi Mumbai",
-        "experience": "Student / Internship",
-        "skills": ["Python", "Java", "C", "React", "JavaScript", "SQL", "FastAPI"],
-        "github": "https://github.com/JeshurunSelvakumar",
-        "linkedin": "https://linkedin.com/in/jeshurun-selvakumar",
-        "projects": ["CareerPulse AI Agent", "Chordician Application", "PhysiX"]
+        "headline": "",
+        "degree": "",
+        "college": "",
+        "year": "",
+        "location": "",
+        "experience": "",
+        "skills": [],
+        "github": "",
+        "linkedin": "",
+        "projects": []
     }
 
     if not user:
-        return {"authenticated": False, "profile_complete": False, "profile": default_profile}
+        return {"authenticated": False, "profile_complete": False, "profile": empty_profile}
 
     try:
         metadata = user.user_metadata or {}
@@ -280,24 +281,24 @@ async def get_user_profile(request: Request, authorization: Optional[str] = Head
             "authenticated": True,
             "profile_complete": profile_complete,
             "profile": {
-                "name": metadata.get("full_name") or metadata.get("name") or default_profile["name"],
-                "email": user.email or default_profile["email"],
+                "name": metadata.get("full_name") or metadata.get("name") or "",
+                "email": user.email or "",
                 "profile_picture": metadata.get("avatar_url") or metadata.get("picture") or "",
-                "headline": metadata.get("headline") or default_profile["headline"],
-                "degree": metadata.get("degree") or default_profile["degree"],
-                "college": metadata.get("college") or default_profile["college"],
-                "year": metadata.get("year") or default_profile["year"],
-                "location": metadata.get("location") or default_profile["location"],
-                "experience": "Student / Internship",
-                "skills": skills if skills else default_profile["skills"],
-                "github": metadata.get("github") or default_profile["github"],
-                "linkedin": metadata.get("linkedin") or default_profile["linkedin"],
-                "projects": metadata.get("projects") or default_profile["projects"]
+                "headline": metadata.get("headline") or "",
+                "degree": metadata.get("degree") or "",
+                "college": metadata.get("college") or "",
+                "year": metadata.get("year") or "",
+                "location": metadata.get("location") or "",
+                "experience": metadata.get("experience") or "",
+                "skills": skills,
+                "github": metadata.get("github") or "",
+                "linkedin": metadata.get("linkedin") or "",
+                "projects": metadata.get("projects") or []
             }
         }
     except Exception as e:
         logger.error("Profile fetch error: %s", str(e))
-        return {"authenticated": False, "profile_complete": False, "profile": default_profile}
+        return {"authenticated": False, "profile_complete": False, "profile": empty_profile}
 
 @app.post("/api/user/profile/update")
 async def update_user_profile(req: ProfileUpdateRequest, auth_tuple=Depends(require_auth_token_and_user)):
@@ -373,14 +374,15 @@ async def save_opportunity(action: OpportunityAction, auth_tuple=Depends(require
 async def get_opportunity_insights(count: int = 50, request: Request = None, authorization: Optional[str] = Header(None)):
     _, user = get_current_token_and_user(request, authorization) if request else (None, None)
     
-    user_profile = {
-        "skills": ["Python", "Java", "C", "React", "JavaScript", "SQL", "FastAPI"],
-        "locations": ["Mumbai", "Navi Mumbai", "Pune", "Remote"],
-        "roles": ["Software Engineer Intern", "Backend Developer Intern", "Frontend Developer Intern", "AI ML Intern"]
-    }
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required to fetch opportunity insights.")
 
-    if user and user.user_metadata:
-        user_profile["skills"] = user.user_metadata.get("skills", user_profile["skills"])
+    metadata = user.user_metadata or {}
+    user_profile = {
+        "skills": metadata.get("skills", []),
+        "locations": [metadata.get("location")] if metadata.get("location") else ["Remote"],
+        "roles": [metadata.get("headline")] if metadata.get("headline") else ["Software Engineer"]
+    }
 
     raw_data = await asyncio.to_thread(search_live_content_via_tavily, user_profile, 10)
     raw_jobs = raw_data.get("jobs", [])
@@ -404,10 +406,10 @@ async def get_opportunity_insights(count: int = 50, request: Request = None, aut
         "status": "success",
         "insights": {
             "insight_text": f"Found {len(valid_opportunities)} strictly verified individual openings matching candidate technical stack.",
-            "best_role": "Software Engineering Intern",
-            "top_skill": user_profile["skills"][0] if user_profile["skills"] else "Python",
-            "growing_skill": "FastAPI",
-            "recommended": "Full Stack AI"
+            "best_role": user_profile["roles"][0] if user_profile["roles"] else "Software Engineer",
+            "top_skill": user_profile["skills"][0] if user_profile["skills"] else "Software Engineering",
+            "growing_skill": user_profile["skills"][1] if len(user_profile["skills"]) > 1 else "API Development",
+            "recommended": "Full Stack Engineering"
         },
         "opportunities": valid_opportunities,
         "daily_news": verified_news
@@ -423,32 +425,21 @@ async def opportunity_contact_lookup(req: ContactLookupRequest):
     return {"status": "success", "contact": data}
 
 @app.post("/api/email/generate")
-async def generate_email_draft(req: EmailDraftRequest, request: Request, authorization: Optional[str] = Header(None)):
-    _, user = get_current_token_and_user(request, authorization)
+async def generate_email_draft(req: EmailDraftRequest, auth_tuple=Depends(require_auth_token_and_user)):
+    _, user = auth_tuple
+    m = user.user_metadata or {}
     
     user_data = {
-        "name": "Jeshurun Selvakumar",
-        "degree": "B.Tech Computer Engineering",
-        "college": "SIES Graduate School of Technology",
-        "year": "Second Year",
-        "skills": ["Python", "Java", "C", "React", "JavaScript", "SQL", "FastAPI"],
-        "projects": ["CareerPulse AI Agent", "Chordician Application", "PhysiX"],
-        "github": "https://github.com/JeshurunSelvakumar",
-        "linkedin": "https://linkedin.com/in/jeshurun-selvakumar",
-        "location": "Mumbai / Navi Mumbai"
+        "name": m.get("full_name") or m.get("name") or "",
+        "degree": m.get("degree") or "",
+        "college": m.get("college") or "",
+        "year": m.get("year") or "",
+        "skills": m.get("skills") or [],
+        "projects": m.get("projects") or [],
+        "github": m.get("github") or "",
+        "linkedin": m.get("linkedin") or "",
+        "location": m.get("location") or ""
     }
-
-    if user and user.user_metadata:
-        m = user.user_metadata
-        user_data["name"] = m.get("full_name") or m.get("name") or user_data["name"]
-        user_data["degree"] = m.get("degree") or user_data["degree"]
-        user_data["college"] = m.get("college") or user_data["college"]
-        user_data["year"] = m.get("year") or user_data["year"]
-        user_data["skills"] = m.get("skills") or user_data["skills"]
-        user_data["projects"] = m.get("projects") or user_data["projects"]
-        user_data["github"] = m.get("github") or user_data["github"]
-        user_data["linkedin"] = m.get("linkedin") or user_data["linkedin"]
-        user_data["location"] = m.get("location") or user_data["location"]
 
     recipient_salutation = f"Dear {req.recipient_name}," if req.recipient_name else "Dear Hiring Team,"
 
@@ -466,7 +457,6 @@ Relevant Projects: {', '.join(user_data['projects'])}
 GitHub Profile: {user_data['github']}
 LinkedIn Profile: {user_data['linkedin']}
 Preferred Role: {req.title}
-Availability: Immediate / Next Semester
 Location: {user_data['location']}
 
 Company Information:
@@ -493,7 +483,7 @@ Return ONLY strict JSON with keys "subject" and "body"."""
     try:
         client = genai.Client(api_key=settings.gemini_api_key) if settings.gemini_api_key else None
         if client:
-            chat = client.chats.create(model=settings.primary_model or "gemini-3.5-flash-lite")
+            chat = client.chats.create(model=settings.primary_model or "gemini-2.5-flash")
             response = await asyncio.to_thread(chat.send_message, prompt)
             text = response.text.strip()
             if text.startswith("```"):
@@ -506,11 +496,14 @@ Return ONLY strict JSON with keys "subject" and "body"."""
         logger.error("Email draft generation error: %s", e)
 
     fallback_subject = f"Application for {req.title} - {user_data['name']}"
+    skills_str = ', '.join(user_data['skills'][:3]) if user_data['skills'] else "software engineering"
+    project_str = user_data['projects'][0] if user_data['projects'] else "academic projects"
+
     fallback_body = f"""{recipient_salutation}
 
 My name is {user_data['name']}, a {user_data['year']} student pursuing {user_data['degree']} at {user_data['college']}. I am writing to express my strong interest in the {req.title} position at {req.company}.
 
-Through my academic coursework and hands-on projects including {user_data['projects'][0]}, I have built practical skills in {', '.join(user_data['skills'][:3])}. My technical background in full-stack engineering and software automation aligns well with the requirements for this role.
+Through my academic coursework and hands-on projects including {project_str}, I have built practical skills in {skills_str}. My technical background aligns well with the requirements for this role.
 
 I am eager to bring this foundation to your engineering team. You can review my work at my GitHub ({user_data['github']}) and LinkedIn ({user_data['linkedin']}).
 
@@ -588,12 +581,9 @@ async def email_test(req: Optional[EmailTestRequest] = None):
 # -------------------------------------------------------------------
 
 @app.get("/api/digest/status")
-async def get_digest_status(request: Request, authorization: Optional[str] = Header(None)):
-    _, user = get_current_token_and_user(request, authorization)
-    user_id = user.id if user else "candidate_default_user"
-    user_email = user.email if user else (settings.smtp_user or "jeshurunselvakumar640@gmail.com")
-    
-    already_sent = is_digest_already_sent_today(user_id, user_email)
+async def get_digest_status(auth_tuple=Depends(require_auth_token_and_user)):
+    _, user = auth_tuple
+    already_sent = is_digest_already_sent_today(user.id, user.email)
     local_history = load_local_digest_history()
     
     return {
@@ -604,16 +594,17 @@ async def get_digest_status(request: Request, authorization: Optional[str] = Hea
     }
 
 @app.post("/api/digest/send")
-async def trigger_digest_send(req: Optional[DigestTriggerRequest] = None, request: Request = None, authorization: Optional[str] = Header(None)):
-    _, user = get_current_token_and_user(request, authorization)
+async def trigger_digest_send(req: Optional[DigestTriggerRequest] = None, auth_tuple=Depends(require_auth_token_and_user)):
+    _, user = auth_tuple
     force = req.force if req else False
+    metadata = user.user_metadata or {}
     user_profile = {
-        "user_id": user.id if user else "candidate_default_user",
-        "name": user.user_metadata.get("full_name") if user and user.user_metadata else "Jeshurun Selvakumar",
-        "email": user.email if user else (settings.smtp_user or "jeshurunselvakumar640@gmail.com"),
-        "skills": ["Python", "Java", "C", "React", "JavaScript", "SQL", "FastAPI"],
-        "locations": ["Mumbai", "Navi Mumbai", "Remote"],
-        "roles": ["Software Engineer Intern", "Backend Developer Intern", "AI ML Intern"]
+        "user_id": user.id,
+        "name": metadata.get("full_name") or metadata.get("name") or "User",
+        "email": user.email,
+        "skills": metadata.get("skills", []),
+        "locations": [metadata.get("location")] if metadata.get("location") else ["Remote"],
+        "roles": [metadata.get("headline")] if metadata.get("headline") else ["Software Engineer"]
     }
 
     result = await send_daily_digest(user_profile, force=force)
@@ -627,29 +618,24 @@ frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
 if os.path.exists(frontend_path):
     app.mount("/static", StaticFiles(directory=frontend_path), name="static")
 
-
 def _serve_frontend_file(filename: str):
-    from fastapi.responses import FileResponse
     target = os.path.join(frontend_path, filename)
     if os.path.exists(target):
         return FileResponse(target)
     return None
-
 
 @app.get("/")
 async def serve_landing():
     """Public landing page. Accessible without authentication."""
     response = _serve_frontend_file("landing.html")
     if response is not None:
-        # Public marketing page: never cache a stale authenticated shell.
         response.headers["Cache-Control"] = "no-store"
         return response
     return JSONResponse(content={"status": "CareerPulse API active"}, status_code=200)
 
-
 @app.get("/app")
 async def serve_dashboard_app():
-    """Authenticated single-page application shell (dashboard, profile, opportunities)."""
+    """Authenticated single-page application shell."""
     response = _serve_frontend_file("index.html")
     if response is not None:
         response.headers["Cache-Control"] = "no-store"

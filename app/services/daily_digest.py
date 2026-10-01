@@ -7,9 +7,10 @@ from typing import Dict, Any, List, Optional
 
 from app.config import settings
 from app.services.email_service import send_email
+from app.services.email_template import build_digest_html, build_digest_text
 from app.services.news_service import fetch_and_verify_technology_news
 from app.services.job_search import discover_and_extract_opportunities
-from app.services.ai_matcher import deterministic_score_opportunity
+from app.services.ai_matcher import deterministic_score_opportunity, display_skills
 from app.services.supabase_client import get_supabase_client
 
 logger = logging.getLogger("careerpulse.daily_digest")
@@ -95,6 +96,20 @@ def is_digest_already_sent_today(user_id: str, recipient_email: str) -> bool:
     return False
 
 
+def _period_label() -> str:
+    """
+    Digest period label derived from the actual 24-hour window processed.
+    Never hardcoded.
+    """
+    now = datetime.now(timezone.utc).astimezone()
+    start = now - timedelta(hours=24)
+    if start.month == now.month and start.day == now.day:
+        return f"{start.strftime('%B %d')} – {now.strftime('%B %d, %Y')}"
+    if start.month == now.month:
+        return f"{start.strftime('%B %d')} – {now.strftime('%B %d, %Y')}"
+    return f"{start.strftime('%b %d')} – {now.strftime('%b')} {now.day}, {now.year}"
+
+
 def build_digest_email_text(
     candidate_name: str,
     news_items: List[Dict[str, Any]],
@@ -102,78 +117,15 @@ def build_digest_email_text(
     skill_gaps: List[str]
 ) -> str:
     """
-    Formats the daily digest email strictly adhering to the structure in Section 14:
-    - Subject: CareerPulse — Your 24-Hour Technology & Career Digest
-    - Hello [Name],
-    - TECHNOLOGY NEWS (Headline, Source, Published, 2-4 sentence summary, Why it matters, Verified URL)
-    - CAREER OPPORTUNITIES (Only verified individual jobs/internships)
-    - SKILL GAPS (Based on verified opportunities)
-    - Regards, CareerPulse
+    Backwards-compatible plain-text digest body, so existing callers keep working.
     """
-    lines = []
-    lines.append(f"Hello {candidate_name},")
-    lines.append("")
-    lines.append("Here is your CareerPulse digest for the last 24 hours.")
-    lines.append("")
-    lines.append("=" * 60)
-    lines.append("TECHNOLOGY NEWS")
-    lines.append("=" * 60)
-    lines.append("")
-
-    if not news_items:
-        lines.append("No major verified technology developments met the publication threshold in the last 24 hours.")
-        lines.append("")
-    else:
-        for idx, news in enumerate(news_items, 1):
-            lines.append(f"{idx}. {news['title']}")
-            lines.append(f"Source: {news['source_name']}")
-            lines.append(f"Published: {news['published_at']}")
-            lines.append(news['summary'])
-            lines.append("")
-            lines.append("Why it matters:")
-            lines.append(news.get('why_it_matters', 'Significant technical and industry development.'))
-            lines.append("")
-            lines.append(f"Source URL: {news['source_url']}")
-            lines.append("-" * 50)
-            lines.append("")
-
-    lines.append("=" * 60)
-    lines.append("CAREER OPPORTUNITIES")
-    lines.append("=" * 60)
-    lines.append("")
-
-    if not opportunities:
-        lines.append("No verified individual opportunities matching candidate criteria were published in the last 24 hours.")
-        lines.append("")
-    else:
-        for opp in opportunities:
-            match = opp.get("match", {})
-            lines.append(f"Role: {opp['title']}")
-            lines.append(f"Company: {opp['company']}")
-            lines.append(f"Location: {opp['location']}")
-            lines.append(f"Required Skills: {', '.join(opp.get('required_skills', [])) or 'None specified'}")
-            lines.append(f"Preferred Skills: {', '.join(opp.get('preferred_skills', [])) or 'None specified'}")
-            lines.append(f"Matched Skills: {', '.join(match.get('matched_skills', [])) or 'General Software Skills'}")
-            lines.append(f"Missing Skills: {', '.join(match.get('missing_skills', [])) or 'None'}")
-            lines.append(f"Match: {match.get('tier', 'Silver')} ({match.get('score', 80)}%)")
-            lines.append(f"Application: {opp.get('application_url') or opp.get('source_url')}")
-            lines.append("-" * 50)
-            lines.append("")
-
-    lines.append("=" * 60)
-    lines.append("SKILL GAPS")
-    lines.append("=" * 60)
-    lines.append("Based on the verified opportunities found today:")
-    if skill_gaps:
-        for gap in skill_gaps[:5]:
-            lines.append(f"- {gap}")
-    else:
-        lines.append("- All primary required technical skills are currently satisfied.")
-    lines.append("")
-    lines.append("Regards,")
-    lines.append("CareerPulse")
-
-    return "\n".join(lines)
+    return build_digest_text(
+        candidate_name=candidate_name,
+        stories=news_items,
+        opportunities=opportunities,
+        skill_gaps=skill_gaps,
+        period_label=_period_label(),
+    )
 
 
 async def send_daily_digest(user_profile: Dict[str, Any], force: bool = False) -> Dict[str, Any]:
@@ -185,7 +137,7 @@ async def send_daily_digest(user_profile: Dict[str, Any], force: bool = False) -
     candidate_name = user_profile.get("name") or "Jeshurun Selvakumar"
     recipient_email = user_profile.get("email") or settings.smtp_user
 
-    logger.info("Executing send_daily_digest for user: %s <%s>", candidate_name, recipient_email)
+    logger.info("digest: generation started for user=%s", user_id)
 
     # 1. Idempotency Check
     if not force and is_digest_already_sent_today(user_id, recipient_email):
@@ -193,37 +145,64 @@ async def send_daily_digest(user_profile: Dict[str, Any], force: bool = False) -
         logger.info(msg)
         return {"status": "skipped", "message": msg}
 
-    # 2. News Pipeline (3 to 6 verified major stories) - run in worker thread
-    news_items = await asyncio.to_thread(fetch_and_verify_technology_news, 5)
+    # 2. News Pipeline - verified, current, max 6 stories
+    news_items = await asyncio.to_thread(fetch_and_verify_technology_news, 6)
+    logger.info("digest: news verified count = %d", len(news_items))
 
-    # 3. Job Pipeline (verified individual opportunities only) - run in worker thread
+    # 3. Job Pipeline (verified individual opportunities only)
     raw_jobs = await asyncio.to_thread(discover_and_extract_opportunities, user_profile, 6)
+    logger.info("digest: job candidates after validation = %d", len(raw_jobs))
+
     scored_jobs = []
     for job in raw_jobs:
         match_res = deterministic_score_opportunity(job, user_profile)
+        if not match_res.get("is_eligible"):
+            logger.info("digest: job rejected (not eligible): %s", job.get("title"))
+            continue
         job["match"] = match_res
+        job["required_skills"] = display_skills(job.get("required_skills") or [])
+        job["preferred_skills"] = display_skills(job.get("preferred_skills") or [])
         scored_jobs.append(job)
+    logger.info("digest: jobs verified and eligible = %d", len(scored_jobs))
 
-    # Calculate skill gaps from missing skills
+    # 4. Skill gaps, from verified opportunities only
     gap_counts: Dict[str, int] = {}
     for job in scored_jobs:
         for s in job.get("match", {}).get("missing_skills", []):
             gap_counts[s] = gap_counts.get(s, 0) + 1
-    skill_gaps = sorted(gap_counts.keys(), key=lambda k: gap_counts[k], reverse=True)
+    skill_gaps = display_skills(sorted(gap_counts.keys(), key=lambda k: gap_counts[k], reverse=True))
 
-    # 4. Format Email
+    # 5. Render both HTML and plain-text parts
+    period_label = _period_label()
     subject = "CareerPulse — Your 24-Hour Technology & Career Digest"
-    email_body = build_digest_email_text(candidate_name, news_items, scored_jobs, skill_gaps)
 
-    # 5. Send Email via SMTP in worker thread
+    plain_body = build_digest_text(
+        candidate_name=candidate_name,
+        stories=news_items,
+        opportunities=scored_jobs,
+        skill_gaps=skill_gaps,
+        period_label=period_label,
+    )
+    html_body = build_digest_html(
+        candidate_name=candidate_name,
+        stories=news_items,
+        opportunities=scored_jobs,
+        skill_gaps=skill_gaps,
+        period_label=period_label,
+    )
+    logger.info("digest: email generated (html=%d bytes text=%d bytes)",
+                len(html_body), len(plain_body))
+
+    # 6. Send Email via SMTP in worker thread
     try:
         await asyncio.to_thread(
             send_email,
             to_email=recipient_email,
             subject=subject,
-            body=email_body
+            body=plain_body,
+            html_body=html_body
         )
-        logger.info("Successfully dispatched daily digest to %s", recipient_email)
+        logger.info("digest: email sent to %s", recipient_email)
     except Exception as e:
         logger.error("Failed to send daily digest email via SMTP: %s", e)
         return {"status": "error", "message": f"SMTP dispatch failed: {str(e)}"}

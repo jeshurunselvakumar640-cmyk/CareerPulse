@@ -20,6 +20,12 @@ from app.services.tavily_search import search_live_content_via_tavily
 from app.services.ai_matcher import enrich_single_job
 from app.services.contact_lookup import lookup_company_contact
 from app.services.email_service import send_email, verify_smtp_connection
+from app.services.email_template import build_test_email_html
+from app.services.personalized_news import (
+    build_news_profile,
+    get_personalized_news,
+    invalidate_news_cache,
+)
 from app.services.daily_digest import (
     send_daily_digest,
     is_digest_already_sent_today,
@@ -113,6 +119,10 @@ class ProfileUpdateRequest(BaseModel):
     linkedin: Optional[str] = ""
     projects: Optional[list] = []
     skills: Optional[list] = []
+    interests: Optional[list] = []
+    preferred_roles: Optional[list] = []
+    preferred_domains: Optional[list] = []
+    experience_level: Optional[str] = ""
 
 class OpportunityAction(BaseModel):
     title: str
@@ -245,7 +255,16 @@ async def logout_get():
     return response
 
 @app.post("/api/auth/logout")
-async def logout_post():
+async def logout_post(request: Request, authorization: Optional[str] = Header(None)):
+    # Drop any cached personalized news for this user so a later sign-in
+    # as the same account cannot surface another session's data.
+    _, user = get_current_token_and_user(request, authorization)
+    if user:
+        try:
+            invalidate_news_cache(user.id)
+        except Exception as e:
+            logger.warning("News cache invalidation on logout warning: %s", e)
+
     response = JSONResponse(content={"status": "success", "message": "Logged out successfully"})
     response.delete_cookie(key="sb-access-token", path="/")
     return response
@@ -265,6 +284,10 @@ async def get_user_profile(request: Request, authorization: Optional[str] = Head
         "location": "",
         "experience": "",
         "skills": [],
+        "interests": [],
+        "preferred_roles": [],
+        "preferred_domains": [],
+        "experience_level": "",
         "github": "",
         "linkedin": "",
         "projects": []
@@ -291,6 +314,10 @@ async def get_user_profile(request: Request, authorization: Optional[str] = Head
                 "location": metadata.get("location") or "",
                 "experience": metadata.get("experience") or "",
                 "skills": skills,
+                "interests": metadata.get("interests") or [],
+                "preferred_roles": metadata.get("preferred_roles") or [],
+                "preferred_domains": metadata.get("preferred_domains") or [],
+                "experience_level": metadata.get("experience_level") or "",
                 "github": metadata.get("github") or "",
                 "linkedin": metadata.get("linkedin") or "",
                 "projects": metadata.get("projects") or []
@@ -318,12 +345,23 @@ async def update_user_profile(req: ProfileUpdateRequest, auth_tuple=Depends(requ
             "github": req.github,
             "linkedin": req.linkedin,
             "projects": req.projects,
-            "skills": req.skills
+            "skills": req.skills,
+            "interests": req.interests,
+            "preferred_roles": req.preferred_roles,
+            "preferred_domains": req.preferred_domains,
+            "experience_level": req.experience_level
         }
 
         user_client.auth.update_user({
             "data": updated_metadata
         })
+
+        # The personalized Tech News cache is keyed on the profile, so a profile
+        # edit must invalidate it or the user would keep seeing stale news.
+        try:
+            invalidate_news_cache(user.id)
+        except Exception as cache_err:
+            logger.warning("News cache invalidation warning: %s", cache_err)
 
         return {"status": "success", "message": "Profile updated in Supabase successfully"}
 
@@ -414,6 +452,34 @@ async def get_opportunity_insights(count: int = 50, request: Request = None, aut
         "opportunities": valid_opportunities,
         "daily_news": verified_news
     }
+
+# -------------------------------------------------------------------
+# PERSONALIZED TECHNOLOGY NEWS
+# -------------------------------------------------------------------
+
+@app.get("/api/user/news/personalized")
+async def get_personalized_tech_news(
+    limit: int = 10,
+    refresh: bool = False,
+    auth_tuple=Depends(require_auth_token_and_user),
+):
+    """
+    Returns technology news personalized to the CURRENT profile of the
+    signed-in user (skills, interests, preferred roles, preferred domains,
+    experience level). Every article is retrieved from its actual source
+    page and verified before it is returned.
+    """
+    _, user = auth_tuple
+    limit = max(1, min(int(limit or 10), 10))
+
+    profile = build_news_profile(user.user_metadata or {}, user_id=user.id)
+    result = await get_personalized_news(
+        profile,
+        limit=limit,
+        refresh=bool(refresh),
+        supabase_client=supabase,
+    )
+    return result
 
 # -------------------------------------------------------------------
 # CONTACT LOOKUP & EMAIL GENERATION
@@ -562,10 +628,18 @@ async def email_test(req: Optional[EmailTestRequest] = None):
         try:
             send_email(
                 to_email=req.to_email,
-                subject="CareerPulse — SMTP Test Verification",
-                body="This is a test notification confirming that CareerPulse Gmail SMTP transport is fully operational."
+                subject="CareerPulse — HTML Email Delivery Test",
+                body=(
+                    "CareerPulse SMTP Test\n\n"
+                    "HTML email delivery is working successfully.\n\n"
+                    "This message was sent as multipart/alternative with an HTML part "
+                    "and a plain-text fallback."
+                ),
+                html_body=build_test_email_html("CareerPulse — HTML Email Delivery Test"),
             )
             return {"status": "success", "message": f"Test email sent successfully to {req.to_email}"}
+        except ValueError as ve:
+            raise HTTPException(status_code=400, detail=str(ve))
         except Exception as e:
             logger.error("SMTP test dispatch failed: %s", e)
             raise HTTPException(status_code=500, detail=f"SMTP dispatch failure: {str(e)}")

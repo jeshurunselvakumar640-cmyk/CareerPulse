@@ -357,14 +357,31 @@
                 <section id="view-news" class="page-view hidden space-y-6">
                     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                         <div class="space-y-1">
-                            <h2 class="text-xl font-extrabold text-white tracking-tight">24-Hour Technology Digest</h2>
-                            <p class="text-xs text-slate-400">Verified major AI, platform, semiconductor, and cybersecurity developments from the last 24 hours.</p>
+                            <h2 class="text-xl font-extrabold text-white tracking-tight">Personalized Technology News</h2>
+                            <p class="text-xs text-slate-400">Current, verified technology news selected for your skills,
+                                interests, and preferred roles.</p>
                         </div>
-                        <button onclick="triggerManualDigestEmail()" id="btnSendDigestNow" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-2 shadow-lg shadow-indigo-600/20">
-                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-                            <span>Send Daily Digest Email</span>
-                        </button>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button onclick="refreshPersonalizedNews()" id="btnRefreshNews"
+                                class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition flex items-center gap-2 border border-slate-700">
+                                <svg id="refreshNewsIcon" class="w-3.5 h-3.5" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                <span id="refreshNewsLabel">Refresh News</span>
+                            </button>
+                            <button onclick="triggerManualDigestEmail()" id="btnSendDigestNow"
+                                class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center gap-2 shadow-lg shadow-indigo-600/20">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                </svg>
+                                <span>Send Daily Digest Email</span>
+                            </button>
+                        </div>
                     </div>
+                    <div id="newsPersonalizationBar" class="hidden text-[11px] text-slate-400"></div>
                     <div id="techNewsContainer" class="space-y-4"></div>
                 </section>
 
@@ -452,10 +469,59 @@
                                 class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500">
                         </div>
 
+                        <div class="space-y-1.5">
+                            <label class="text-xs font-semibold text-slate-300 block">Interests (comma separated)</label>
+                            <input type="text" id="profInterests"
+                                placeholder="e.g., Artificial Intelligence, Data Science, Web Development"
+                                class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500">
+                            <p class="text-[10px] text-slate-500">Used to personalize your Technology News feed.</p>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div class="space-y-1.5">
+                                <label class="text-xs font-semibold text-slate-300 block">Preferred Roles (comma
+                                    separated)</label>
+                                <input type="text" id="profPreferredRoles" placeholder="AI ML Intern, Backend Developer"
+                                    class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500">
+                            </div>
+                            <div class="space-y-1.5">
+                                <label class="text-xs font-semibold text-slate-300 block">Preferred Domains (comma
+                                    separated)</label>
+                                <input type="text" id="profPreferredDomains" placeholder="Artificial Intelligence, Fintech"
+                                    class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500">
+                            </div>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <label class="text-xs font-semibold text-slate-300 block">Experience Level</label>
+                            <select id="profExperienceLevel"
+                                class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500">
+                                <option value="">Select experience level</option>
+                                <option value="Student / Fresher">Student / Fresher</option>
+                                <option value="Entry Level">Entry Level</option>
+                                <option value="Mid Level">Mid Level</option>
+                                <option value="Senior">Senior</option>
+                            </select>
+                        </div>
+
                         <button type="submit"
                             class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/20">Save
                             Profile Settings</button>
                     </form>
+
+                    <div
+                        class="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-3 shadow-xl">
+                        <div class="space-y-1">
+                            <h3 class="text-sm font-bold text-white">Session</h3>
+                            <p class="text-xs text-slate-400">Sign out of CareerPulse on this device. Your saved profile
+                                and opportunity data stay linked to your account.</p>
+                        </div>
+                        <button type="button" id="profileLogoutBtn" title="Logout"
+                            class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-red-600 hover:text-white text-slate-300 text-xs font-bold transition flex items-center gap-2">
+                            <span aria-hidden="true">&#8599;</span>
+                            Logout
+                        </button>
+                    </div>
                 </section>
 
             </main>

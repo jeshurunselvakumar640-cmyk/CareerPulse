@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from typing import Optional, Dict, Any, List
+from urllib.parse import urlparse
 
 class HTMLTextExtractor(HTMLParser):
     """
@@ -51,6 +52,28 @@ def clean_page_html(raw_html: str) -> str:
         clean = re.sub(r'<[^>]*>', ' ', raw_html)
         clean = html.unescape(clean)
         return re.sub(r'\s+', ' ', clean).strip()
+
+
+def clean_inline_safe(text: str) -> str:
+    """
+    Removes any residual HTML/CSS/JS/SVG contamination from a single string.
+    Guarantees that no markup or utility-class fragment can reach the
+    dashboard or an email.
+    """
+    if not text or not isinstance(text, str):
+        return ""
+    s = text
+    s = re.sub(r'<script[^>]*>.*?</script>', ' ', s, flags=re.S | re.I)
+    s = re.sub(r'<style[^>]*>.*?</style>', ' ', s, flags=re.S | re.I)
+    s = re.sub(r'<svg[^>]*>.*?</svg>', ' ', s, flags=re.S | re.I)
+    s = re.sub(r'<[^>]+>', ' ', s)
+    s = html.unescape(s)
+    # attribute leftovers
+    s = re.sub(r'\b(?:class|style|href|src|alt|id|onclick)\s*=\s*["\'][^"\']*["\']', ' ', s, flags=re.I)
+    # tailwind / css utility fragments
+    s = re.sub(r'\b(?:rounded|shadow|bg-|text-|border-|flex|grid|items-|justify-|gap-|px-|py-|pt-|pb-|pl-|pr-|mt-|mb-|w-\d|h-\d|min-h|max-w|overflow|z-|inset|absolute|relative|block|hidden|inline)[a-z0-9\-/\[\]\.]*', ' ', s)
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s
 
 
 def is_html_contaminated(text: str) -> bool:
@@ -104,10 +127,27 @@ def is_listing_page(title: str, text: str = "", url: str = "") -> bool:
         "/jobs/search", "/internships/search", "/search/jobs", "search?", "q=",
         "/jobs-in-", "/internships-in-", "/vacancies-in-",
         "/all-jobs", "/find-jobs", "/browse-jobs", "/browse/", "/categories/",
-        "-jobs.html", "/best-", "/top-", "/list-of-", "/roundup"
+        "-jobs.html", "/best-", "/top-", "/list-of-", "/roundup",
+        "/jobs/developer/internships", "/jobs/remote", "/remote-jobs",
+        "/internships/remote", "/browse-jobs", "/all-openings", "/openings",
+        "/job-categories", "/job-search", "/jobs/search", "/jobs?",
     ]
     for pattern in invalid_url_patterns:
         if pattern in url_lower:
+            return True
+
+    # Aggregator category/search pages (e.g. remoterocketship.com/jobs/developer/internships)
+    aggregator_categories = [
+        "remoterocketship.com", "remoteok.com", "remoteok.io", "weworkremotely.com",
+        "hackernewsjob.com", "jobicy.com", "adzuna.com", "jooble.org",
+        "jobboard.io", "landing.jobs", "indeed.com/jobs", "naukri.com/jobs",
+        "monster.com/jobs", "glassdoor.com/jobs", "ziprecruiter.com/jobs",
+        "internshala.com/internships", "unstop.com/opportunities",
+    ]
+    if any(agg in url_lower for agg in aggregator_categories):
+        # a deep path on an aggregator is a listing, not a single opening
+        path = urlparse(url_lower).path.strip("/")
+        if path.count("/") >= 1 or url_lower.endswith("/"):
             return True
 
     # 2. Strict listing patterns in title
@@ -136,7 +176,15 @@ def is_listing_page(title: str, text: str = "", url: str = "") -> bool:
         r'\bsearch\s+results\b',
         r'\bcareers\s+portal\b',
         r'\bhiring\s+trends\b',
-        r'\bsalary\s+guide\b'
+        r'\bsalary\s+guide\b',
+        r'\bbrowse\s+jobs\b',
+        r'\ball\s+openings\b',
+        r'\ball\s+internships\b',
+        r'\bopen\s+positions\b',
+        r'\bavailable\s+positions\b',
+        r'\bcurrent\s+openings\b',
+        r'\bjobs?\s+(?:listings?|list)\b',
+        r'\b[\w&/\-]{0,28}\s+internships\s+(?:in|at|for)\b'
     ]
     for pattern in listing_title_patterns:
         if re.search(pattern, combined_title):
@@ -211,33 +259,30 @@ def clean_job_title(title: str) -> Optional[str]:
     if not raw:
         return None
 
+    # Clean markup/CSS first, then validate the resulting text.
+    # (Rejecting before cleaning would discard recoverable titles that merely
+    #  arrived wrapped in markup.)
+    t = clean_inline_safe(raw)
+    if not t:
+        return None
+
     # Immediate rejection if contaminated with HTML/CSS
-    if is_html_contaminated(raw):
+    if is_html_contaminated(t):
         return None
 
     # Immediate rejection if title indicates a collection/list page
-    if is_listing_page(raw):
+    if is_listing_page(t):
         return None
-
-    # Unescape HTML entities (e.g. &amp;, &quot;, &#39;)
-    t = html.unescape(raw)
-    t = re.sub(r'<[^>]*>', '', t)
-    t = re.sub(r'\s+', ' ', t).strip()
-
-    # Remove leading/trailing non-alphanumeric noise
-    t = re.sub(r'^[^\w\(\)\#\+\.]+|[^\w\(\)\#\+\.]+$', '', t).strip()
 
     if len(t) < 3 or len(t) > 100:
         return None
 
     # Strip company or site suffix if attached via standard separators
     # E.g. "Software Engineer Intern - Acme Corp" -> "Software Engineer Intern"
-    # But only if left side is a coherent title (>= 4 chars)
     for sep in [" - ", " | ", " at ", " @ "]:
         if sep in t:
             parts = t.split(sep)
             candidate = parts[0].strip()
-            # If left side looks like a title, use it
             if len(candidate) >= 4 and not is_listing_page(candidate) and not is_html_contaminated(candidate):
                 t = candidate
                 break

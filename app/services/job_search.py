@@ -15,8 +15,10 @@ from app.services.html_parser import (
     is_html_contaminated,
     is_listing_page,
     is_expired_opportunity,
-    extract_structured_metadata_from_html
+    extract_structured_metadata_from_html,
+    clean_inline_safe,
 )
+from app.services.ai_matcher import display_skills, display_skill
 
 logger = logging.getLogger("careerpulse.job_pipeline")
 
@@ -41,6 +43,44 @@ def is_direct_company_url(url: str) -> bool:
         "boards.greenhouse.io", "apply.workable.com", "careers."
     ]
     return any(p in u for p in direct_patterns)
+
+
+def looks_like_multi_job_listing(text: str) -> bool:
+    """
+    Strong listing signals that a page holds MANY openings rather than one:
+    pagination, result counts, filters, or repeated job cards.
+    """
+    t = (text or "")[:8000].lower()
+    if not t:
+        return False
+
+    # Pagination / result counters
+    if re.search(r"showing\s+\d+\s*[-–to]+\s*(\d+\s*)?of\s+[\d,]+", t):
+        return True
+    if re.search(r"\b\d[\d,]{2,}\s+(?:jobs|openings|internships|results)\s+found\b", t):
+        return True
+    if re.search(r"\bpage\s+\d+\s+of\s+\d+", t):
+        return True
+
+    # Filters / sorting UI
+    if re.search(r"filter\s+by\s+(location|experience|role|company|salary)", t):
+        return True
+    if re.search(r"sort\s+by\s+(relevance|date|salary)", t):
+        return True
+    if re.search(r"\bsearch\s+(jobs|results)\b", t) and re.search(r"\brelease\b|\bapply\b", t) and \
+            len(re.findall(r"\bapply\b", t)) >= 8:
+        return True
+
+    # Repeated job cards: many distinct apply/role entries = a list, not one role
+    apply_count = len(re.findall(r"\b(apply now|view job|quick apply|apply\b)", t))
+    if apply_count >= 6:
+        return True
+
+    # Multiple distinct "Role at Company" style entries
+    if len(re.findall(r"\b(?:apply|view)\b", t)) >= 6 and len(set(re.findall(r"\b[a-z]{3,}\b", t))) < 400:
+        return True
+
+    return False
 
 
 def is_known_aggregator(url: str) -> bool:
@@ -156,19 +196,30 @@ Return ONLY a strict JSON object adhering to this schema:
     "opportunity_type": "job" or "internship",
     "title": "exact job title or null",
     "company": "exact company name or null",
-    "location": "specific location or 'Remote' or null",
+    "location": "location EXACTLY as stated on the source page, or null",
     "employment_type": "Full-time" or "Internship" or "Part-time" or null,
     "experience_level": "Internship" or "Entry level" or null,
     "required_skills": ["skill1", "skill2"],
     "preferred_skills": ["skill1"],
     "description_summary": "concise 2-3 sentence factual summary of responsibilities without HTML",
     "application_url": "verified direct link if present in text, else null",
+    "source_url": "the URL of the supplied page",
     "posted_date": "YYYY-MM-DD or null",
     "deadline": "YYYY-MM-DD or null",
     "is_aggregator": false,
+    "is_list_page": false,
     "is_expired": false,
-    "confidence": integer between 0 and 100
-}}"""
+    "confidence": integer between 0 and 100,
+    "rejection_reason": ""
+}}
+
+CRITICAL RULES:
+- The "location" value MUST be copied from the supplied page only. Never infer or
+  substitute a city, region or "Remote" that the page does not state.
+- If the page represents multiple openings, a search result, a category page or a
+  careers homepage without one specific role, return "is_valid_opportunity": false.
+- Never fabricate any field. Use null when the information is absent.
+- Strip any HTML or CSS from every string value."""
 
     try:
         chat = client.chats.create(model=settings.primary_model or "gemini-3.5-flash-lite")
@@ -281,6 +332,11 @@ def discover_and_extract_opportunities(user_profile: Dict[str, Any], max_results
             logger.info("Rejected opportunity (detected listing page): %s - %s", best_title, url)
             continue
 
+        # Strong multi-opening signals (pagination, filters, many job cards)
+        if looks_like_multi_job_listing(content_text or raw_snippet_content):
+            logger.info("Rejected opportunity (page holds multiple openings): %s - %s", best_title, url)
+            continue
+
         # Expiration check
         is_expired = (
             is_expired_opportunity(content_text, metadata.get("deadline")) or
@@ -292,27 +348,40 @@ def discover_and_extract_opportunities(user_profile: Dict[str, Any], max_results
 
         # Establish Company
         company = metadata.get("company")
-        if not company:
+        if company:
+            company = clean_inline_safe(company)
+        if not company or len(company) < 2 or is_known_aggregator(url):
             # Parse from title if formatted like "Role at Company" or "Role - Company"
             if " at " in raw_snippet_title:
-                company = raw_snippet_title.split(" at ")[-1].split("|")[0].split(" - ")[0].strip()
+                company = clean_inline_safe(raw_snippet_title.split(" at ")[-1].split("|")[0].split(" - ")[0].strip())
             elif " - " in raw_snippet_title:
                 parts = raw_snippet_title.split(" - ")
                 if len(parts) > 1 and len(parts[1].strip()) < 35:
-                    company = parts[1].strip()
-            else:
-                domain = urlparse(url).netloc.replace("www.", "")
-                company = domain.split(".")[0].capitalize()
+                    company = clean_inline_safe(parts[1].strip())
 
         if not company or len(company) < 2:
+            # The employer name cannot be established from the source.
+            # Never invent one from the domain name.
             logger.info("Rejected opportunity (company could not be verified): %s", url)
             continue
 
-        # Location
-        location = metadata.get("location") or "Mumbai, Remote"
+        # Location - taken strictly from the verified source.
+        # It is NEVER inferred from the candidate's preferred location.
+        location = metadata.get("location") or ""
+        if location:
+            location = clean_inline_safe(location)
+        # "Remote" is only added when the source explicitly states it.
+        if location and not re.search(r'\bremote\b', location, re.IGNORECASE):
+            if re.search(r'\bremote\b', content_text[:3000] or "", re.IGNORECASE):
+                location = f"{location} · Remote"
+        # No invented fallback: leave empty when the source states nothing.
+        if not location:
+            logger.info("Opportunity has no verified source location: %s", url)
 
         # Skills
         req_skills, pref_skills = extract_skills_heuristically(content_text or raw_snippet_content)
+        req_skills = display_skills(req_skills)
+        pref_skills = display_skills(pref_skills)
 
         # Description
         description = metadata.get("description") or clean_page_html(content_text or raw_snippet_content)
@@ -344,15 +413,19 @@ def discover_and_extract_opportunities(user_profile: Dict[str, Any], max_results
                 best_title = g_title
             g_comp = gemini_result.get("company")
             if g_comp and isinstance(g_comp, str) and len(g_comp) >= 2:
-                company = g_comp
+                company = clean_inline_safe(g_comp)
             if gemini_result.get("required_skills"):
-                req_skills = [s for s in gemini_result["required_skills"] if isinstance(s, str)]
+                req_skills = display_skills([s for s in gemini_result["required_skills"] if isinstance(s, str)])
             if gemini_result.get("preferred_skills"):
-                pref_skills = [s for s in gemini_result["preferred_skills"] if isinstance(s, str)]
+                pref_skills = display_skills([s for s in gemini_result["preferred_skills"] if isinstance(s, str)])
             if gemini_result.get("description_summary"):
                 description = clean_page_html(gemini_result["description_summary"])
+            # Only accept a Gemini-supplied location when it is non-empty.
+            # The candidate's own location is never substituted.
             if gemini_result.get("location"):
-                location = gemini_result["location"]
+                g_loc = clean_inline_safe(gemini_result["location"])
+                if g_loc and not location:
+                    location = g_loc
             if gemini_result.get("is_expired"):
                 logger.info("Gemini marked opportunity as expired: %s", best_title)
                 continue
@@ -374,8 +447,10 @@ def discover_and_extract_opportunities(user_profile: Dict[str, Any], max_results
             "posted_date": metadata.get("posted_date") or None,
             "deadline": metadata.get("deadline") or None,
             "is_aggregator": is_known_aggregator(url),
+            "is_list_page": False,
             "is_expired": False,
-            "confidence": 95 if metadata.get("is_job_posting") else 85
+            "confidence": 95 if metadata.get("is_job_posting") else 85,
+            "rejection_reason": ""
         }
 
         extracted_opportunities.append(opportunity_record)

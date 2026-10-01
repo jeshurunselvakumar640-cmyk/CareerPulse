@@ -16,6 +16,18 @@ const USER_AVATAR_SVG = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2
 
 const APP_VIEW_HASHES = ["dashboard", "profile", "interested", "waitlist", "news"];
 
+// Personalized tech news state.
+// Kept separate from currentTechNews so opening the tab never re-triggers an
+// API call, and so a duplicate in-flight request cannot be issued.
+const newsState = {
+    loaded: false,
+    loading: false,
+    inFlight: false,
+    articles: [],
+    signature: null,
+    error: null
+};
+
 function escapeHtml(text) {
     if (!text) return "";
     return String(text)
@@ -197,6 +209,12 @@ async function saveProfileChanges(event) {
 
     const projectsInput = document.getElementById("profProjects").value;
     const skillsInput = document.getElementById("profSkills").value;
+    const interestsInput = document.getElementById("profInterests")?.value || "";
+    const rolesInput = document.getElementById("profPreferredRoles")?.value || "";
+    const domainsInput = document.getElementById("profPreferredDomains")?.value || "";
+    const experienceInput = document.getElementById("profExperienceLevel")?.value || "";
+
+    const splitList = (v) => v ? v.split(",").map(s => s.trim()).filter(Boolean) : [];
 
     const payload = {
         headline: document.getElementById("profHeadline").value.trim(),
@@ -206,8 +224,12 @@ async function saveProfileChanges(event) {
         location: document.getElementById("profLocation").value.trim(),
         github: document.getElementById("profGithub").value.trim(),
         linkedin: document.getElementById("profLinkedin").value.trim(),
-        projects: projectsInput ? projectsInput.split(",").map(s => s.trim()).filter(Boolean) : [],
-        skills: skillsInput ? skillsInput.split(",").map(s => s.trim()).filter(Boolean) : []
+        projects: splitList(projectsInput),
+        skills: splitList(skillsInput),
+        interests: splitList(interestsInput),
+        preferred_roles: splitList(rolesInput),
+        preferred_domains: splitList(domainsInput),
+        experience_level: experienceInput
     };
 
     try {
@@ -232,6 +254,9 @@ async function saveProfileChanges(event) {
             showToast("Profile settings saved directly to Supabase!");
             // Reload profile and then redirect existing users to dashboard
             await fetchUserProfile();
+            // A profile edit changes what the Tech News feed is personalized
+            // for, so the cached feed must be discarded locally and refetched.
+            resetPersonalizedNews();
             // After first-time profile save, navigate to dashboard
             setTimeout(() => navigateTo("dashboard"), 400);
         } else {
@@ -350,6 +375,10 @@ function showAuthenticatedUI(user) {
     if (document.getElementById("profLinkedin")) document.getElementById("profLinkedin").value = user.linkedin || "";
     if (document.getElementById("profProjects")) document.getElementById("profProjects").value = Array.isArray(user.projects) ? user.projects.join(", ") : (user.projects || "");
     if (document.getElementById("profSkills")) document.getElementById("profSkills").value = Array.isArray(skillsArr) ? skillsArr.join(", ") : skillsArr;
+    if (document.getElementById("profInterests")) document.getElementById("profInterests").value = Array.isArray(user.interests) ? user.interests.join(", ") : (user.interests || "");
+    if (document.getElementById("profPreferredRoles")) document.getElementById("profPreferredRoles").value = Array.isArray(user.preferred_roles) ? user.preferred_roles.join(", ") : (user.preferred_roles || "");
+    if (document.getElementById("profPreferredDomains")) document.getElementById("profPreferredDomains").value = Array.isArray(user.preferred_domains) ? user.preferred_domains.join(", ") : (user.preferred_domains || "");
+    if (document.getElementById("profExperienceLevel")) document.getElementById("profExperienceLevel").value = user.experience_level || "";
 
     renderSkillsBadge(Array.isArray(skillsArr) ? skillsArr : ["Python", "FastAPI"]);
 }
@@ -362,6 +391,8 @@ function clearUserState() {
     currentSwipeIndex = 0;
     currentEmailPayload = null;
     currentTechNews = [];
+    // Personalized news is per-user: never let one account see another's feed.
+    resetPersonalizedNews();
     authState.authenticated = false;
     authState.user = null;
 
@@ -430,6 +461,264 @@ function navigateTo(view) {
     document.querySelectorAll(".nav-item").forEach(el => el.classList.remove("bg-indigo-600", "text-white"));
     const navBtn = document.getElementById(`nav-${view}`);
     if (navBtn) navBtn.classList.add("bg-indigo-600", "text-white");
+
+    // Load personalized news the first time the tab is opened only.
+    if (view === "news") loadPersonalizedNews();
+}
+
+/* ------------------------------------------------------------------
+ * PERSONALIZED TECHNOLOGY NEWS
+ * ------------------------------------------------------------------ */
+
+function resetPersonalizedNews() {
+    newsState.loaded = false;
+    newsState.loading = false;
+    newsState.inFlight = false;
+    newsState.articles = [];
+    newsState.signature = null;
+    newsState.error = null;
+    newsState.loadedSignature = null;
+}
+
+function setNewsRefreshBusy(busy) {
+    const btn = document.getElementById("btnRefreshNews");
+    const label = document.getElementById("refreshNewsLabel");
+    const icon = document.getElementById("refreshNewsIcon");
+    if (btn) btn.disabled = busy;
+    if (label) label.textContent = busy ? "Refreshing…" : "Refresh News";
+    if (icon) icon.style.opacity = busy ? "0.4" : "1";
+}
+
+function renderNewsLoading() {
+    const c = document.getElementById("techNewsContainer");
+    if (!c) return;
+    c.innerHTML = `
+        <div class="p-6 rounded-2xl bg-slate-900 border border-slate-800 flex items-center gap-3">
+            <svg class="w-4 h-4 animate-spin text-indigo-400" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            <p class="text-xs text-slate-400">Finding verified technology news for your profile…</p>
+        </div>`;
+}
+
+function renderNewsEmpty(message, showUpdateProfile) {
+    const c = document.getElementById("techNewsContainer");
+    if (!c) return;
+    c.innerHTML = `
+        <div class="p-8 rounded-2xl bg-slate-900 border border-slate-800 text-center space-y-4">
+            <p class="text-sm text-slate-300 font-semibold">${escapeHtml(message)}</p>
+            <div class="flex flex-col sm:flex-row gap-2 justify-center">
+                <button onclick="refreshPersonalizedNews()"
+                    class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition">Refresh News</button>
+                ${showUpdateProfile ? `<button onclick="navigateTo('profile')"
+                    class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition border border-slate-700">Update Profile</button>` : ""}
+            </div>
+        </div>`;
+}
+
+function renderNewsError(detail) {
+    const c = document.getElementById("techNewsContainer");
+    if (!c) return;
+    c.innerHTML = `
+        <div class="p-6 rounded-2xl bg-rose-500/10 border border-rose-500/30 space-y-3">
+            <p class="text-sm text-rose-200 font-semibold">Could not load technology news</p>
+            <p class="text-xs text-rose-200/80">${escapeHtml(detail || "Please try again in a moment.")}</p>
+            <button onclick="refreshPersonalizedNews()"
+                class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition">Retry</button>
+        </div>`;
+}
+
+/** Builds a single news card. All external text is escaped; URLs are validated. */
+function buildNewsCard(article, index) {
+    const url = (article.url && /^https?:\/\//i.test(article.url)) ? article.url : "";
+    const tags = [
+        ...(article.matched_interests || []),
+        ...(article.matched_skills || [])
+    ].filter(Boolean);
+
+    const card = document.createElement("article");
+    card.className = "p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3 transition hover:border-indigo-600/50";
+
+    // Category + index
+    const head = document.createElement("div");
+    head.className = "flex items-center gap-3";
+    const num = document.createElement("span");
+    num.className = "text-[10px] font-extrabold text-indigo-400 tracking-widest";
+    num.textContent = String(index + 1).padStart(2, "0");
+    const cat = document.createElement("span");
+    cat.className = "px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 text-[10px] font-bold";
+    cat.textContent = article.category || "Technology";
+    head.appendChild(num);
+    head.appendChild(cat);
+    card.appendChild(head);
+
+    // Headline
+    const title = document.createElement("h3");
+    title.className = "text-base font-bold text-white leading-snug";
+    title.textContent = article.title || "";
+    card.appendChild(title);
+
+    // Source + published
+    const meta = document.createElement("p");
+    meta.className = "text-[11px] text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-1";
+    const src = document.createElement("span");
+    src.className = "font-semibold text-slate-300";
+    src.textContent = article.source_name || article.source_domain || "Source";
+    meta.appendChild(src);
+    if (article.published_at) {
+        const sep = document.createElement("span");
+        sep.textContent = "·";
+        const when = document.createElement("span");
+        const d = new Date(article.published_at);
+        when.textContent = Number.isNaN(d.getTime())
+            ? article.published_at
+            : d.toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
+        meta.appendChild(sep);
+        meta.appendChild(when);
+    }
+    card.appendChild(meta);
+
+    // Summary
+    if (article.summary) {
+        const sum = document.createElement("p");
+        sum.className = "text-xs text-slate-300 leading-relaxed";
+        sum.textContent = article.summary;
+        card.appendChild(sum);
+    }
+
+    // Why this matters to you
+    if (article.why_it_matters) {
+        const why = document.createElement("div");
+        why.className = "p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20";
+        const label = document.createElement("p");
+        label.className = "text-[10px] font-bold text-indigo-300 uppercase tracking-wide mb-1";
+        label.textContent = "Why this matters to you";
+        const body = document.createElement("p");
+        body.className = "text-xs text-indigo-100/90 leading-relaxed";
+        body.textContent = article.why_it_matters;
+        why.appendChild(label);
+        why.appendChild(body);
+        card.appendChild(why);
+    }
+
+    // Matched interests / skills
+    if (tags.length) {
+        const tagRow = document.createElement("div");
+        tagRow.className = "flex flex-wrap gap-1.5";
+        tags.forEach(t => {
+            const chip = document.createElement("span");
+            chip.className = "px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 text-[10px] font-semibold border border-slate-700";
+            chip.textContent = t;
+            tagRow.appendChild(chip);
+        });
+        card.appendChild(tagRow);
+    }
+
+    // Read more
+    if (url) {
+        const btn = document.createElement("a");
+        btn.href = url;
+        btn.target = "_blank";
+        btn.rel = "noopener noreferrer";
+        btn.className = "inline-flex items-center gap-1.5 self-start px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition border border-slate-700";
+        btn.textContent = "Read Article →";
+        card.appendChild(btn);
+    }
+
+    return card;
+}
+
+function renderPersonalizedNews(articles) {
+    const c = document.getElementById("techNewsContainer");
+    if (!c) return;
+
+    if (!articles || !articles.length) {
+        const emptyProfile = !newsState.hasProfileSignal;
+        renderNewsEmpty(
+            emptyProfile
+                ? "Add skills and interests to your profile so CareerPulse can personalize your technology news."
+                : "No recent technology news matching your interests was found.",
+            emptyProfile
+        );
+        return;
+    }
+
+    c.innerHTML = "";
+    articles.forEach((article, i) => c.appendChild(buildNewsCard(article, i)));
+
+    // Show what the feed was personalized for
+    const bar = document.getElementById("newsPersonalizationBar");
+    const p = newsState.personalizedFor;
+    if (bar && p) {
+        const bits = [];
+        if (p.interests?.length) bits.push(`interests: ${p.interests.join(", ")}`);
+        if (p.skills?.length) bits.push(`skills: ${p.skills.slice(0, 6).join(", ")}`);
+        if (p.roles?.length) bits.push(`roles: ${p.roles.join(", ")}`);
+        if (p.domains?.length) bits.push(`domains: ${p.domains.join(", ")}`);
+        bar.textContent = bits.length
+            ? `Personalized for your ${bits.join(" · ")}`
+            : "Personalized for your profile";
+        bar.classList.remove("hidden");
+    }
+}
+
+async function loadPersonalizedNews(forceRefresh) {
+    if (newsState.inFlight) return;
+    if (newsState.loaded && !forceRefresh) return;
+
+    newsState.inFlight = true;
+    newsState.loading = true;
+    renderNewsLoading();
+    setNewsRefreshBusy(true);
+
+    try {
+        const authHeaders = await getAuthHeader();
+        const url = `/api/user/news/personalized?limit=10${forceRefresh ? "&refresh=true" : ""}`;
+        const res = await fetch(url, { headers: { ...authHeaders }, credentials: "same-origin" });
+
+        if (res.status === 401) {
+            handleExpiredToken();
+            return;
+        }
+
+        const data = await res.json();
+
+        if (!res.ok || data.status === "error") {
+            newsState.error = data.detail || "News retrieval failed.";
+            renderNewsError(newsState.error);
+            newsState.loaded = false;
+            return;
+        }
+
+        newsState.articles = data.articles || [];
+        newsState.personalizedFor = data.personalized_for || null;
+        newsState.hasProfileSignal = !!(
+            data.personalized_for &&
+            ((data.personalized_for.interests || []).length ||
+                (data.personalized_for.skills || []).length ||
+                (data.personalized_for.roles || []).length ||
+                (data.personalized_for.domains || []).length)
+        );
+        newsState.error = null;
+        newsState.loaded = true;
+        renderPersonalizedNews(newsState.articles);
+    } catch (e) {
+        console.error("Personalized news error:", e);
+        newsState.error = "Network error while loading news.";
+        renderNewsError(newsState.error);
+        newsState.loaded = false;
+    } finally {
+        newsState.inFlight = false;
+        newsState.loading = false;
+        setNewsRefreshBusy(false);
+    }
+}
+
+/** Manual "Refresh News" button. */
+function refreshPersonalizedNews() {
+    loadPersonalizedNews(true);
 }
 
 function openFetchModal() { document.getElementById("fetchOptionsModal").classList.remove("hidden"); }

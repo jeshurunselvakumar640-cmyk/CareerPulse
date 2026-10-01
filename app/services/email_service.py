@@ -1,17 +1,45 @@
 import smtplib
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from app.config import settings
+
+
+def _build_message(
+    to_email: str,
+    subject: str,
+    body: str,
+    html_body: Optional[str] = None,
+) -> MIMEMultipart:
+    """
+    Builds a multipart/alternative message when an HTML part is supplied,
+    otherwise a plain-text-only message (unchanged legacy behavior).
+    """
+    if html_body:
+        message = MIMEMultipart("alternative")
+        # Plain text must be the FIRST part for correct client fallback.
+        message.attach(MIMEText(body, "plain", "utf-8"))
+        message.attach(MIMEText(html_body, "html", "utf-8"))
+    else:
+        message = MIMEText(body, "plain", "utf-8")
+
+    message["From"] = settings.smtp_user
+    message["To"] = to_email
+    message["Subject"] = subject
+    return message
 
 
 def send_email(
     to_email: str,
     subject: str,
     body: str,
+    html_body: Optional[str] = None,
 ) -> None:
     """
-    Send a plain-text email using Gmail SMTP and MIME.
+    Send an email using Gmail SMTP and MIME.
+    When html_body is provided the message is multipart/alternative
+    (text/plain + text/html). SMTP transport and credentials are unchanged.
     """
 
     smtp_host = settings.smtp_host
@@ -34,15 +62,7 @@ def send_email(
             "Recipient email is required"
         )
 
-    message = MIMEText(
-        body,
-        "plain",
-        "utf-8",
-    )
-
-    message["From"] = smtp_user
-    message["To"] = to_email
-    message["Subject"] = subject
+    message = _build_message(to_email, subject, body, html_body)
 
     try:
         with smtplib.SMTP(

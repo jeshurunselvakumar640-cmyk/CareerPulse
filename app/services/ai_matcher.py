@@ -22,9 +22,12 @@ SKILL_ALIASES = {
     "mongo": "mongodb",
     "ml": "machine learning",
     "ai": "artificial intelligence",
+    "ai/ml": "artificial intelligence / machine learning",
+    "ai/ml engineer": "artificial intelligence / machine learning",
     "genai": "generative ai",
-    "git/github": "git",
-    "github": "git",
+    "git/github": "git/github",
+    "github": "git/github",
+    "git": "git/github",
     "c++": "c++",
     "golang": "go",
     "aws": "amazon web services",
@@ -32,17 +35,114 @@ SKILL_ALIASES = {
     "rest": "rest api",
     "restful api": "rest api",
     "rest apis": "rest api",
-    "fast api": "fastapi"
+    "fast api": "fastapi",
+    "ai/llms": "ai / llms",
+    "llm": "ai / llms",
+    "llms": "ai / llms",
+    "apis": "apis",
+    "restful apis": "apis",
+    "api": "apis",
 }
+
+# Human-readable display form. Displayed in the dashboard and the digest email.
+SKILL_DISPLAY_NAMES = {
+    "javascript": "JavaScript",
+    "typescript": "TypeScript",
+    "react": "React",
+    "node": "Node.js",
+    "nodejs": "Node.js",
+    "postgresql": "PostgreSQL",
+    "mongodb": "MongoDB",
+    "machine learning": "Machine Learning",
+    "artificial intelligence": "Artificial Intelligence",
+    "artificial intelligence / machine learning": "AI / Machine Learning",
+    "generative ai": "Generative AI",
+    "git/github": "Git / GitHub",
+    "amazon web services": "Amazon Web Services",
+    "google cloud": "Google Cloud",
+    "rest api": "REST API",
+    "apis": "APIs",
+    "ai / llms": "AI / LLMs",
+    "fastapi": "FastAPI",
+    "python": "Python",
+    "java": "Java",
+    "c++": "C++",
+    "sql": "SQL",
+    "mysql": "MySQL",
+    "django": "Django",
+    "flask": "Flask",
+    "docker": "Docker",
+    "kubernetes": "Kubernetes",
+    "go": "Go",
+    "graphql": "GraphQL",
+    "html": "HTML",
+    "css": "CSS",
+    "tailwind": "Tailwind CSS",
+    "tensorflow": "TensorFlow",
+    "pytorch": "PyTorch",
+    "pandas": "Pandas",
+    "numpy": "NumPy",
+    "opencv": "OpenCV",
+    "aws": "Amazon Web Services",
+    "azure": "Azure",
+    "linux": "Linux",
+    "git": "Git",
+}
+
+# Terms that should never be treated as equivalent to a different skill.
+NON_EQUIVALENT_GUARDS = {"java", "javascript", "c", "c++", "go", "rust"}
+
 
 def normalize_skill(skill: str) -> str:
     """Normalizes skill aliases to consistent lowercase canonical names."""
     if not skill or not isinstance(skill, str):
         return ""
     s = skill.strip().lower()
-    # Remove leading bullet points or extra punctuation
-    s = re.sub(r'^[•\-\*\s]+', '', s).strip()
-    return SKILL_ALIASES.get(s, s)
+    s = re.sub(r'^[•\-*\s]+', '', s).strip()
+    s = SKILL_ALIASES.get(s, s)
+    # Guard against collapsing genuinely different languages
+    if s in NON_EQUIVALENT_GUARDS:
+        return s
+    return s
+
+
+def display_skill(skill: str) -> str:
+    """Human-readable, correctly cased skill label for the UI and email."""
+    if not skill or not isinstance(skill, str):
+        return ""
+    raw = skill.strip()
+    if not raw:
+        return ""
+    canonical = normalize_skill(raw)
+    if canonical in SKILL_DISPLAY_NAMES:
+        return SKILL_DISPLAY_NAMES[canonical]
+    # Fallback: title-case words but preserve known acronyms.
+    acronyms = {"ai", "ml", "api", "apis", "sql", "css", "html", "aws", "gcp", "llm", "llms",
+                "gpu", "qa", "ui", "ux", "os", "db", "ci", "cd", "js", "ts", "nlp", "iot"}
+    words = re.split(r'([/+&])', raw)
+    out = []
+    for w in words:
+        if w in ("/", "+", "&"):
+            out.append(" / " if w == "/" else w)
+        elif w.lower() in acronyms:
+            out.append(w.upper())
+        else:
+            out.append(w[:1].upper() + w[1:] if w else w)
+    return "".join(out).strip()
+
+
+def display_skills(skills) -> list:
+    """Formats a list of skills for display, de-duplicated."""
+    if not skills:
+        return []
+    seen = set()
+    out = []
+    for s in skills:
+        d = display_skill(s)
+        if d and d.lower() not in seen:
+            seen.add(d.lower())
+            out.append(d)
+    return out
 
 
 def deterministic_score_opportunity(job: Dict[str, Any], user_profile: Dict[str, Any]) -> Dict[str, Any]:
@@ -53,9 +153,11 @@ def deterministic_score_opportunity(job: Dict[str, Any], user_profile: Dict[str,
     - Role Relevance = 10%
     - Experience/Location Compatibility = 10%
 
+    Hard eligibility failures are rejected outright rather than scored.
+
     Tiers:
     - Gold: >= 60
-    - Silver: 40–59
+    - Silver: 40-59
     - Bronze: < 40
     """
     user_skills_raw = user_profile.get("skills", ["Python", "Java", "C", "React", "JavaScript", "SQL", "FastAPI"])
@@ -63,10 +165,29 @@ def deterministic_score_opportunity(job: Dict[str, Any], user_profile: Dict[str,
 
     job_title = job.get("title", "")
     job_desc = job.get("description_summary", "") or job.get("description", "")
+    # NOTE: location is taken from the verified source and is never replaced
+    # with the candidate's preferred location.
     job_location = str(job.get("location", "")).lower()
+
+    # --- HARD ELIGIBILITY GATE ---
+    is_expired = bool(job.get("is_expired", False))
+    if is_expired:
+        return {
+            "score": 0,
+            "tier": "Rejected",
+            "required_skill_score": 0,
+            "preferred_skill_score": 0,
+            "role_score": 0,
+            "experience_location_score": 0,
+            "matched_skills": [],
+            "missing_skills": [],
+            "is_eligible": False,
+            "rejection_reason": "Opportunity is expired or closed.",
+        }
 
     # 1. Required Skills
     req_skills_raw = job.get("required_skills", [])
+    required_inferred = False
     if not req_skills_raw:
         # Infer technical skills from title and description if not pre-parsed
         inferred = []
@@ -75,7 +196,11 @@ def deterministic_score_opportunity(job: Dict[str, Any], user_profile: Dict[str,
         for tech in common_tech:
             if re.search(rf'\b{re.escape(tech)}\b', combined_text):
                 inferred.append(tech)
-        req_skills_raw = inferred or ["Python"]
+        if inferred:
+            req_skills_raw = inferred
+            required_inferred = True
+        else:
+            req_skills_raw = []
 
     req_skills = {normalize_skill(s) for s in req_skills_raw if s}
 
@@ -84,18 +209,25 @@ def deterministic_score_opportunity(job: Dict[str, Any], user_profile: Dict[str,
     pref_skills = {normalize_skill(s) for s in pref_skills_raw if s}
 
     # Required Skills Score (max 60)
+    matched_req = set()
+    missing_req = []
     if req_skills:
         matched_req = user_skills.intersection(req_skills)
-        missing_req = list(req_skills - user_skills)
+        missing_req = sorted(req_skills - user_skills)
         req_ratio = len(matched_req) / len(req_skills)
         req_score = req_ratio * 60.0
+        # Preserve the posting's own ordering for stable, readable output.
+        matched_req_ordered = [s for s in req_skills_raw if normalize_skill(s) in matched_req]
     else:
+        # No verifiable requirements: award only partial credit. A posting
+        # whose requirements cannot be verified must never score full marks.
         matched_req = user_skills.intersection({"python", "javascript", "sql"})
-        missing_req = []
-        req_ratio = 1.0 if matched_req else 0.5
+        matched_req_ordered = ["Python"] if matched_req else []
+        req_ratio = 0.5
         req_score = req_ratio * 60.0
 
     # Preferred Skills Score (max 20)
+    preferred_known = bool(pref_skills)
     if pref_skills:
         matched_pref = user_skills.intersection(pref_skills)
         pref_ratio = len(matched_pref) / len(pref_skills)
@@ -127,6 +259,19 @@ def deterministic_score_opportunity(job: Dict[str, Any], user_profile: Dict[str,
     total_score = int(round(req_score + pref_score + role_score + exp_loc_score))
     total_score = max(0, min(100, total_score))
 
+    # Confidence ceiling: a score may only approach 100 when the posting
+    # actually stated its requirements and preferred skills were verifiable.
+    # Matching one skill (e.g. Python) alone must never produce Gold 100%.
+    if not req_skills or required_inferred:
+        total_score = min(total_score, 72)
+    if not preferred_known:
+        total_score = min(total_score, 88)
+    if len(user_skills.intersection(req_skills)) <= 1 and req_skills:
+        total_score = min(total_score, 84)
+    # Any unverified requirement caps the score further.
+    if missing_req and len(missing_req) > 2:
+        total_score = min(total_score, 70)
+
     # Strict Tiers: Gold >= 60, Silver 40-59, Bronze < 40
     if total_score >= 60:
         tier = "Gold"
@@ -136,8 +281,9 @@ def deterministic_score_opportunity(job: Dict[str, Any], user_profile: Dict[str,
         tier = "Bronze"
 
     # Human-readable matched and missing skills
-    matched_skills_display = [s.capitalize() for s in matched_req] if matched_req else ["Python"]
-    missing_skills_display = [s.capitalize() for s in missing_req]
+    ordered_raw = matched_req_ordered if matched_req_ordered else list(matched_req)
+    matched_skills_display = display_skills(ordered_raw) or display_skills(["Python"])
+    missing_skills_display = display_skills(missing_req)
 
     return {
         "score": total_score,

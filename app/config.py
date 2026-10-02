@@ -35,11 +35,13 @@ class Settings:
 
             # Gmail OAuth Configuration (mailbox READ access for company replies).
             # Sending stays on SMTP above; this is only used to READ replies.
-            self.gmail_client_id = os.getenv("GOOGLE_CLIENT_ID", "")
-            self.gmail_client_secret = os.getenv("GOOGLE_CLIENT_SECRET", "")
+            # Values are stripped: an environment variable pasted with a trailing
+            # newline or stray space is rejected by Google as `invalid_client`.
+            self.gmail_client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+            self.gmail_client_secret = os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
             # Empty means "derive from the incoming request", which keeps local
             # development working without hard-coding a host.
-            self.gmail_redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "")
+            self.gmail_redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "").strip()
             # Read-only scopes only: no send, no modify, no mailbox deletion.
             self.gmail_scopes = [
                 "https://www.googleapis.com/auth/gmail.readonly",

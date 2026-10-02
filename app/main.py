@@ -673,6 +673,7 @@ async def email_test(req: Optional[EmailTestRequest] = None):
 # encrypted on the server. No token ever reaches the browser.
 
 GMAIL_OAUTH_COOKIE = "cp-gmail-oauth"
+GMAIL_REDIRECT_COOKIE = "cp-gmail-redirect"
 GMAIL_OAUTH_MAX_AGE = 600
 
 # Provider-safe messages for the UI. Raw OAuth/API errors are never returned.
@@ -703,9 +704,24 @@ def _mailbox_error_status(code: str) -> int:
     return 502
 
 def _gmail_redirect_uri(request: Request) -> str:
-    """Prefer the configured URI, otherwise derive it from the live host."""
+    """
+    Resolve the OAuth redirect URI.
+
+    A configured value always wins. Otherwise it is derived from the live host,
+    honouring the forwarded scheme explicitly: on Vercel the app sits behind a
+    proxy and uvicorn only trusts forwarded headers from loopback, so
+    `request.base_url` can silently downgrade to `http://`. Google requires the
+    redirect URI to match the authorize request character for character.
+    """
     if settings.gmail_redirect_uri:
         return settings.gmail_redirect_uri
+
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip().lower()
+    forwarded_host = request.headers.get("x-forwarded-host", "").split(",")[0].strip()
+    if forwarded_proto in ("http", "https"):
+        host = forwarded_host or request.url.netloc
+        return f"{forwarded_proto}://{host}/api/email/integration/callback"
+
     base_url = str(request.base_url).rstrip("/")
     return f"{base_url}/api/email/integration/callback"
 
@@ -747,6 +763,17 @@ async def email_integration_connect(request: Request, auth_tuple=Depends(require
         max_age=GMAIL_OAUTH_MAX_AGE,
         path="/",
     )
+    # Reuse the exact redirect URI that was sent to Google, so the token
+    # exchange repeats it byte for byte.
+    response.set_cookie(
+        key=GMAIL_REDIRECT_COOKIE,
+        value=redirect_uri,
+        httponly=True,
+        samesite="lax",
+        secure=str(request.url.scheme) == "https",
+        max_age=GMAIL_OAUTH_MAX_AGE,
+        path="/",
+    )
     return response
 
 @app.get("/api/email/integration/callback")
@@ -774,8 +801,21 @@ async def email_integration_callback(request: Request, code: Optional[str] = Non
     if not code:
         return RedirectResponse(url="/app#applications&mailbox=missing_code")
 
+    # The redirect URI stored at connect time is the exact string Google
+    # received on the authorize request. Reusing it guarantees the token
+    # request repeats it character for character.
+    redirect_uri = request.cookies.get(GMAIL_REDIRECT_COOKIE) or _gmail_redirect_uri(request)
+
     try:
-        bundle = gmail_client.exchange_authorization_code(code, _gmail_redirect_uri(request))
+        bundle = gmail_client.exchange_authorization_code(code, redirect_uri)
+        # A grant whose Gmail identity could not be verified is not a usable
+        # connection: never persist it and never report it as connected.
+        if not (bundle.mailbox_email or "").strip():
+            logger.warning(
+                "Gmail OAuth completed without a resolved mailbox address; "
+                "the connection was not saved."
+            )
+            return RedirectResponse(url="/app#applications&mailbox=email_unresolved")
         reply_tracker.save_connection(
             supabase=supabase,
             user_id=user.id,
@@ -795,6 +835,7 @@ async def email_integration_callback(request: Request, code: Optional[str] = Non
 
     response = RedirectResponse(url="/app#applications&mailbox=connected")
     response.delete_cookie(key=GMAIL_OAUTH_COOKIE, path="/")
+    response.delete_cookie(key=GMAIL_REDIRECT_COOKIE, path="/")
     return response
 
 @app.post("/api/email/integration/disconnect")

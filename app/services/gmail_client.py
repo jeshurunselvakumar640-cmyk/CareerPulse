@@ -99,6 +99,26 @@ def is_mailbox_oauth_configured() -> bool:
     return bool(settings.gmail_client_id and settings.gmail_client_secret)
 
 
+def _log_oauth_diagnostics(stage: str, redirect_uri: str) -> None:
+    """
+    Log enough to identify which OAuth client is loaded, without leaking it.
+
+    A client id is not a secret (it already travels in the consent URL), so only
+    its last few characters are shown. The secret is never logged, only its
+    length, which is what distinguishes a truncated or newline-padded value.
+    """
+    client_id = settings.gmail_client_id or ""
+    logger.warning(
+        "Gmail OAuth client [%s]: client_id_present=%s client_id_suffix=%s "
+        "client_secret_len=%d redirect_uri=%r",
+        stage,
+        bool(client_id),
+        client_id[-8:] if client_id else "(none)",
+        len(settings.gmail_client_secret or ""),
+        redirect_uri,
+    )
+
+
 def build_authorization_url(state: str, redirect_uri: str) -> str:
     """
     Build the Google consent URL.
@@ -112,6 +132,8 @@ def build_authorization_url(state: str, redirect_uri: str) -> str:
             "Gmail OAuth is not configured on this server. Add GOOGLE_CLIENT_ID "
             "and GOOGLE_CLIENT_SECRET to the environment."
         )
+
+    _log_oauth_diagnostics("authorize", redirect_uri)
 
     params = {
         "client_id": settings.gmail_client_id,
@@ -129,8 +151,16 @@ def build_authorization_url(state: str, redirect_uri: str) -> str:
 
 
 def _post_token(payload: Dict[str, str]) -> Dict:
+    # `data=` makes requests send application/x-www-form-urlencoded, which is
+    # what the Google token endpoint requires. The header is set explicitly so
+    # the wire format is never in doubt.
     try:
-        response = requests.post(GOOGLE_TOKEN_URL, data=payload, timeout=REQUEST_TIMEOUT)
+        response = requests.post(
+            GOOGLE_TOKEN_URL,
+            data=payload,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=REQUEST_TIMEOUT,
+        )
     except requests.RequestException as e:
         raise MailboxProviderError(f"Could not reach Google: {e}") from e
 
@@ -148,6 +178,25 @@ def _post_token(payload: Dict[str, str]) -> Dict:
     # Never surface raw provider text to the browser.
     logger.warning("Google token endpoint returned %s (%s)", response.status_code, err.get("error"))
 
+    # `invalid_client` means Google rejected the client credentials themselves,
+    # not the code or the redirect. Log the sanitized reason and which parameters
+    # were sent so a newline-padded or mismatched value can be identified.
+    if err.get("error") == "invalid_client":
+        logger.warning(
+            "Google rejected the OAuth client (invalid_client). Sent: "
+            "client_id_suffix=%s client_secret_len=%d redirect_uri=%r. "
+            "The secret is not logged. A trailing newline in "
+            "GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET or a secret belonging to a "
+            "different OAuth client both produce this error.",
+            (settings.gmail_client_id or "")[-8:] if settings.gmail_client_id else "(none)",
+            len(settings.gmail_client_secret or ""),
+            payload.get("redirect_uri"),
+        )
+        raise MailboxAuthError(
+            "Google rejected this OAuth client. An administrator must check "
+            "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET."
+        )
+
     if response.status_code in (400, 401):
         raise MailboxAuthError(err.get("error_description") or "Google rejected the authorization request.")
     if response.status_code == 429:
@@ -160,6 +209,8 @@ def exchange_authorization_code(code: str, redirect_uri: str) -> TokenBundle:
     if not is_mailbox_oauth_configured():
         raise MailboxNotConfigured("Gmail OAuth is not configured on this server.")
 
+    _log_oauth_diagnostics("token", redirect_uri)
+
     data = _post_token({
         "code": code,
         "client_id": settings.gmail_client_id,
@@ -167,6 +218,14 @@ def exchange_authorization_code(code: str, redirect_uri: str) -> TokenBundle:
         "redirect_uri": redirect_uri,
         "grant_type": "authorization_code",
     })
+
+    # TEMPORARY DIAGNOSTIC: log the scope names Google actually granted so a
+    # missing scope can be told apart from a rejected token. Scope names only.
+    granted_scopes = data.get("scope", "")
+    logger.warning(
+        "Google OAuth granted scopes: %s",
+        granted_scopes if granted_scopes else "(none)",
+    )
 
     access_token = data.get("access_token", "")
     if not access_token:
@@ -217,19 +276,86 @@ def refresh_access_token(refresh_token: str) -> TokenBundle:
     )
 
 
+def _safe_provider_detail(response) -> str:
+    """
+    Short, log-safe reason from a Google error body.
+
+    Only Google's own error fields are used and the result is truncated, so an
+    access token, refresh token or client secret can never reach the logs.
+    """
+    try:
+        payload = response.json() or {}
+    except ValueError:
+        return "unreadable error body"
+    if not isinstance(payload, dict):
+        return "unexpected error body"
+
+    parts = []
+    error = payload.get("error")
+    if isinstance(error, dict):
+        parts.append(str(error.get("status") or error.get("message") or ""))
+    elif isinstance(error, str):
+        parts.append(error)
+    description = payload.get("error_description")
+    if isinstance(description, str):
+        parts.append(description)
+
+    detail = " ".join(p for p in parts if p).strip()
+    return detail[:200] or "no reason supplied"
+
+
 def fetch_mailbox_email(access_token: str) -> str:
-    """Resolve the connected mailbox address (read-only userinfo scope)."""
+    """
+    Resolve the connected mailbox address (read-only userinfo scope).
+
+    A failure is never reported as an empty address: an OAuth grant whose
+    identity cannot be verified must not be stored as a working connection.
+    Provider errors are raised as mailbox exceptions and logged with the HTTP
+    status plus a sanitized reason, so a deployment can tell a missing scope
+    from an expired token or a network failure. Tokens are never logged.
+    """
     try:
         response = requests.get(
             GOOGLE_USERINFO_URL,
             headers={"Authorization": f"Bearer {access_token}"},
             timeout=REQUEST_TIMEOUT,
         )
-        if response.status_code == 200:
-            return (response.json() or {}).get("email", "")
     except requests.RequestException as e:
-        logger.warning("Could not resolve mailbox address: %s", e)
-    return ""
+        logger.warning(
+            "Could not reach the Google userinfo endpoint (%s).", type(e).__name__
+        )
+        raise MailboxProviderError("Could not reach Google to resolve the Gmail address.") from e
+
+    if response.status_code != 200:
+        logger.warning(
+            "Google userinfo returned HTTP %s (reason=%s). The grant may be "
+            "expired, revoked, or may not include the userinfo.email scope.",
+            response.status_code,
+            _safe_provider_detail(response),
+        )
+        if response.status_code in (401, 403):
+            raise MailboxAuthError(
+                "Google did not authorize reading the Gmail address for this grant."
+            )
+        if response.status_code == 429:
+            raise MailboxRateLimited("Google is rate limiting the Gmail address lookup.")
+        raise MailboxProviderError("Google could not resolve the Gmail address.")
+
+    try:
+        payload = response.json() or {}
+    except ValueError as e:
+        logger.warning("Google userinfo returned HTTP 200 with an unreadable body.")
+        raise MailboxProviderError("Google returned an unreadable userinfo response.") from e
+
+    email = payload.get("email") if isinstance(payload, dict) else None
+    if not isinstance(email, str) or not email.strip():
+        logger.warning(
+            "Google userinfo returned HTTP 200 without an email address; the "
+            "userinfo.email scope was not granted for this account."
+        )
+        raise MailboxAuthError("Google did not report an email address for this account.")
+
+    return email.strip()
 
 
 # -------------------------------------------------------------------

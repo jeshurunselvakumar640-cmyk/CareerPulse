@@ -12,12 +12,15 @@ Design constraints:
   the API layer maps to user-facing messages.
 """
 import base64
+import hashlib
+import hmac
 import html
 import json
 import logging
 import re
+import secrets as secrets_module
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -33,6 +36,9 @@ GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1/users/me"
 GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 
 REQUEST_TIMEOUT = 30
+
+# A signed state is only accepted for this long after the redirect was started.
+STATE_MAX_AGE_SECONDS = 600
 
 
 class MailboxError(Exception):
@@ -117,6 +123,83 @@ def _log_oauth_diagnostics(stage: str, redirect_uri: str) -> None:
         len(settings.gmail_client_secret or ""),
         redirect_uri,
     )
+
+
+def _state_signing_key() -> bytes:
+    """
+    Server-side key for signing OAuth state.
+
+    Reuses the existing mailbox token key so no new secret is required. State is
+    signed, never encrypted: it carries no credential, only a user id, an
+    expiry and a nonce.
+    """
+    raw = (
+        (settings.mailbox_token_encryption_key or "").strip()
+        or (settings.supabase_key or "").strip()
+        or "careerpulse-state-dev-only"
+    )
+    return hashlib.sha256(f"gmail-oauth-state:{raw}".encode("utf-8")).digest()
+
+
+def build_signed_state(user_id: str, nonce: str = "") -> str:
+    """
+    Build a signed, self-contained OAuth state that carries the user context.
+
+    The browser only returns cookies on some cross-site redirects, and the
+    session cookie is written once at login, so it can be absent or stale by the
+    time Google redirects back. A signed state survives that without weakening
+    CSRF protection: the user id cannot be forged or edited because the whole
+    payload is HMAC-verified with the server key.
+    """
+    issued_at = int(datetime.now(timezone.utc).timestamp())
+    payload = {
+        "uid": str(user_id),
+        "iat": issued_at,
+        "exp": issued_at + STATE_MAX_AGE_SECONDS,
+        "nonce": nonce or secrets_module.token_urlsafe(16),
+    }
+    body = base64.urlsafe_b64encode(
+        json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    ).decode("ascii").rstrip("=")
+    signature = hmac.new(_state_signing_key(), body.encode("ascii"), hashlib.sha256).hexdigest()
+    return f"{body}.{signature}"
+
+
+def read_signed_state(state: str) -> Optional[Dict]:
+    """
+    Verify a signed state and return its payload, or None if it is not trusted.
+
+    A tampered, expired or truncated state returns None rather than raising, so
+    the caller can fall back to the cookie-based check.
+    """
+    if not state or "." not in state:
+        return None
+    body, _, signature = state.rpartition(".")
+    if not body or not signature:
+        return None
+
+    expected = hmac.new(_state_signing_key(), body.encode("ascii"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, signature):
+        logger.warning("Rejected a Gmail OAuth state with an invalid signature.")
+        return None
+
+    padded = body + "=" * (-len(body) % 4)
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")))
+    except (ValueError, UnicodeDecodeError):
+        return None
+    if not isinstance(payload, dict) or not payload.get("uid"):
+        return None
+
+    try:
+        expires_at = int(payload.get("exp", 0))
+    except (TypeError, ValueError):
+        return None
+    if expires_at <= int(datetime.now(timezone.utc).timestamp()):
+        logger.warning("Rejected an expired Gmail OAuth state.")
+        return None
+
+    return payload
 
 
 def build_authorization_url(state: str, redirect_uri: str) -> str:

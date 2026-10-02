@@ -5,7 +5,6 @@ import json
 import hmac
 import logging
 import asyncio
-import secrets
 from datetime import datetime, timedelta
 import zoneinfo
 from fastapi import FastAPI, Request, HTTPException, Header, Depends
@@ -745,9 +744,11 @@ async def email_integration_connect(request: Request, auth_tuple=Depends(require
         )
 
     redirect_uri = _gmail_redirect_uri(request)
-    state = f"{user.id}.{secrets.token_urlsafe(32)}"
+    # The state carries the user id under an HMAC signature so the callback can
+    # still identify the user if the session cookie is missing on the way back.
+    signed_state = gmail_client.build_signed_state(user.id)
     try:
-        url = gmail_client.build_authorization_url(state, redirect_uri)
+        url = gmail_client.build_authorization_url(signed_state, redirect_uri)
     except MailboxError as e:
         raise HTTPException(status_code=503, detail=_mailbox_error_detail(getattr(e, "code", "")))
 
@@ -756,7 +757,7 @@ async def email_integration_connect(request: Request, auth_tuple=Depends(require
     # the cookie is returned on Google's top-level redirect back to us.
     response.set_cookie(
         key=GMAIL_OAUTH_COOKIE,
-        value=state,
+        value=signed_state,
         httponly=True,
         samesite="lax",
         secure=str(request.url.scheme) == "https",
@@ -784,15 +785,33 @@ async def email_integration_callback(request: Request, code: Optional[str] = Non
     The user identity is re-derived from the existing session cookie, never
     from anything the provider sends, so one account can never attach another
     account's mailbox.
+
+    The session cookie is written once at login and browsers withhold cookies on
+    some cross-site redirects, so a live session can be unavailable by the time
+    Google redirects back. The signed state carries the same user id and is
+    HMAC-verified, which keeps CSRF protection without depending on the cookie.
     """
-    _, user = get_current_token_and_user(request, None)
-    if not user:
+    token, user = get_current_token_and_user(request, None)
+    state_payload = gmail_client.read_signed_state(state) if state else None
+
+    if not user and state_payload:
+        logger.info(
+            "Resolving the Gmail connection from a signed OAuth state because "
+            "the session was unavailable on the redirect back."
+        )
+        user_id = str(state_payload["uid"])
+    elif user:
+        user_id = user.id
+    else:
         return RedirectResponse(url="/?error=signin_required")
 
-    stored_state = request.cookies.get(GMAIL_OAUTH_COOKIE)
-    if not state or not stored_state or not hmac.compare_digest(state, stored_state):
-        logger.warning("Rejected a Gmail OAuth callback with an invalid state value.")
-        return RedirectResponse(url="/app#applications&mailbox=state_mismatch")
+    # With a live session the cookie must still match: it proves this browser
+    # started the flow. Without a session the signed state is the only proof.
+    if user is not None:
+        stored_state = request.cookies.get(GMAIL_OAUTH_COOKIE)
+        if not state or not stored_state or not hmac.compare_digest(state, stored_state):
+            logger.warning("Rejected a Gmail OAuth callback with an invalid state value.")
+            return RedirectResponse(url="/app#applications&mailbox=state_mismatch")
 
     if error:
         logger.info("Gmail authorization was not completed: %s", error)
@@ -803,7 +822,7 @@ async def email_integration_callback(request: Request, code: Optional[str] = Non
 
     # The redirect URI stored at connect time is the exact string Google
     # received on the authorize request. Reusing it guarantees the token
-    # request repeats it character for character.
+    # request repeats it byte for byte.
     redirect_uri = request.cookies.get(GMAIL_REDIRECT_COOKIE) or _gmail_redirect_uri(request)
 
     try:
@@ -818,7 +837,7 @@ async def email_integration_callback(request: Request, code: Optional[str] = Non
             return RedirectResponse(url="/app#applications&mailbox=email_unresolved")
         reply_tracker.save_connection(
             supabase=supabase,
-            user_id=user.id,
+            user_id=user_id,
             access_token=bundle.access_token,
             refresh_token=bundle.refresh_token,
             expires_at=bundle.expires_at,

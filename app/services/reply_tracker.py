@@ -387,7 +387,27 @@ def save_connection(
                 "The mailbox integration tables have not been created yet.",
                 missing=MAILBOX_TABLE,
             ) from e
-        logger.error("Could not save the mailbox connection: %s", e)
+        # Distinguish a permissions/RLS rejection from a generic failure. Only
+        # the PostgREST error code and message are logged; the payload holds
+        # encrypted tokens and is never included.
+        message = str(e)
+        if "PGRST301" in message or "row-level security" in message.lower() or "permission denied" in message.lower():
+            logger.error(
+                "Supabase refused the mailbox_connections write for this user "
+                "(RLS or permissions). Check the table's policies and the API "
+                "key's role: %s",
+                message[:200],
+            )
+        else:
+            logger.error(
+                "Could not save the mailbox connection (provider=%s, "
+                "has_access_token=%s, has_refresh_token=%s, mailbox_email_set=%s): %s",
+                provider,
+                bool(payload["access_token_encrypted"]),
+                bool(payload["refresh_token_encrypted"]),
+                bool(payload["mailbox_email"]),
+                message[:200],
+            )
         raise MailboxProviderError("Could not save the mailbox connection.")
 
 

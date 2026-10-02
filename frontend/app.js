@@ -819,7 +819,7 @@ async function loadApplications() {
             renderInterestedList();
         }
     } catch (e) {
-        console.warn("Could not load applications");
+        console.warn("Could not load applications:", e);
     }
 }
 
@@ -1563,6 +1563,7 @@ function handlePopupSwipe(direction) {
 
     if (direction === 'right') {
         card.classList.add("animate-swipe-right");
+        if (!currentJob) return;
         currentJob.status = "interested";
         savedInterestedJobs.push(currentJob);
         persistOpportunityState(currentJob, "interested");
@@ -1837,7 +1838,9 @@ function renderInterestedList() {
         container.innerHTML = `<p class="text-xs text-slate-500 italic">No interested jobs saved yet. Swipe right on opportunities to save them here.</p>`;
         return;
     }
-    container.innerHTML = savedInterestedJobs.map(job => `
+    container.innerHTML = savedInterestedJobs
+        .filter(job => job && typeof job === "object")
+        .map(job => `
         <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 flex flex-col gap-3">
             <div class="flex justify-between items-center">
                 <div>

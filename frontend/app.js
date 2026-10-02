@@ -543,20 +543,34 @@ function resetApplicationsState() {
     if (modal) modal.classList.add("hidden");
 }
 
-function handleMailboxRedirectResult(result) {
+async function handleMailboxRedirectResult(result) {
     const messages = {
         connected: "Gmail connected. Company replies will appear here.",
         denied: "Gmail access was not granted. You can connect it any time.",
         state_mismatch: "That Gmail authorization request expired. Please try connecting again.",
         missing_code: "Gmail did not return an authorization code. Please try again.",
         not_configured: "Gmail integration is not configured on this server yet.",
+        email_unresolved: "Google authorized Gmail, but your Gmail address could not be verified. Please reconnect to finish setup.",
         auth_error: "Gmail could not be authorized. Please try again.",
         provider_error: "Gmail could not be reached. Please try again shortly."
     };
+
+    // The redirect hash is not proof of a working connection. Confirm against the
+    // server before reporting success, so an unresolved identity is never shown
+    // as "Gmail connected".
+    if (result === "connected") {
+        await loadMailboxStatus();
+        const integration = applicationsState.integration;
+        if (!integration || !integration.connected || !integration.email) {
+            result = "email_unresolved";
+        }
+    }
+
     applicationsState.syncNotice = {
         tone: result === "connected" ? "success" : "warning",
         text: messages[result] || "The mailbox connection could not be completed."
     };
+    renderReplyNotification();
 }
 
 function setSyncBusy(busy) {

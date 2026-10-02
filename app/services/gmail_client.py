@@ -304,15 +304,62 @@ def _safe_provider_detail(response) -> str:
     return detail[:200] or "no reason supplied"
 
 
+def fetch_mailbox_email_via_gmail(access_token: str) -> str:
+    """
+    Resolve the mailbox address from the Gmail profile resource.
+
+    `users/me/profile` is authorized by `gmail.readonly` alone, so it keeps
+    working when the OpenID/userinfo scopes were only partially granted. This
+    is the authoritative answer for a Gmail-only integration: it is the address
+    the mailbox actually serves, not a directory identity.
+    """
+    data = _gmail_request("GET", "/profile", access_token)
+    email = data.get("emailAddress") if isinstance(data, dict) else None
+    if not isinstance(email, str) or not email.strip():
+        logger.warning(
+            "Gmail users/me/profile returned no emailAddress; the token may not "
+            "carry the gmail.readonly scope."
+        )
+        raise MailboxAuthError("Gmail did not report an address for this mailbox.")
+    return email.strip()
+
+
 def fetch_mailbox_email(access_token: str) -> str:
     """
-    Resolve the connected mailbox address (read-only userinfo scope).
+    Resolve the connected mailbox address.
+
+    Gmail's own profile resource is tried first because it depends only on
+    `gmail.readonly`, the one scope this integration is certain to hold. The
+    userinfo endpoint is the fallback for grants that carry the OpenID scopes
+    but not Gmail read access.
 
     A failure is never reported as an empty address: an OAuth grant whose
     identity cannot be verified must not be stored as a working connection.
     Provider errors are raised as mailbox exceptions and logged with the HTTP
     status plus a sanitized reason, so a deployment can tell a missing scope
     from an expired token or a network failure. Tokens are never logged.
+    """
+    first_error: Optional[MailboxError] = None
+    for resolver in (fetch_mailbox_email_via_gmail, _fetch_mailbox_email_via_userinfo):
+        try:
+            return resolver(access_token)
+        except MailboxError as e:
+            logger.warning(
+                "Could not resolve the mailbox address via %s (%s).",
+                resolver.__name__, getattr(e, "code", "mailbox_error"),
+            )
+            if first_error is None:
+                first_error = e
+
+    raise first_error or MailboxProviderError("Google could not resolve the Gmail address.")
+
+
+def _fetch_mailbox_email_via_userinfo(access_token: str) -> str:
+    """
+    Resolve the mailbox address from the OpenID Connect userinfo endpoint.
+
+    Requires the `userinfo.email` scope. Kept as a fallback for grants that
+    carry OpenID scopes without Gmail read access.
     """
     try:
         response = requests.get(

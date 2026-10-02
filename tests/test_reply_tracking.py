@@ -610,7 +610,7 @@ check("integration status never exposes tokens",
       not any(k in status for k in ("access_token_encrypted", "refresh_token_encrypted",
                                     "access_token", "refresh_token")))
 check("integration status only requests read-only scopes",
-      all("readonly" in s or "userinfo" in s for s in status.get("scopes", []))
+      all("readonly" in s or "userinfo" in s or s == "openid" for s in status.get("scopes", []))
       and not any(s.endswith(".send") or "modify" in s for s in status.get("scopes", [])),
       status.get("scopes"))
 

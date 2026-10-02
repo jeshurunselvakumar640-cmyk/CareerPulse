@@ -309,10 +309,15 @@ def mailbox_integration_status(supabase, user_id: str) -> Dict:
         return status
 
     status.update({
-        "connected": connection.get("status") == "connected",
+        # A connection counts as connected only when it is active AND its Gmail
+        # identity was verified. An unresolved address is reported as
+        # not connected so the UI offers a reconnect instead of a false success.
+        "connected": connection.get("status") == "connected" and bool(
+            (connection.get("mailbox_email") or "").strip()
+        ),
         "needs_reconnect": connection.get("status") == "needs_reconnect",
         "provider": connection.get("provider"),
-        "email": connection.get("mailbox_email") or None,
+        "email": (connection.get("mailbox_email") or "").strip() or None,
         "last_sync_at": connection.get("last_sync_at"),
         "last_sync_error": connection.get("last_sync_error"),
     })
@@ -361,7 +366,8 @@ def save_connection(
     payload = {
         "user_id": user_id,
         "provider": provider,
-        "mailbox_email": mailbox_email,
+        # Never store a meaningless empty string; the column is nullable.
+        "mailbox_email": (mailbox_email or "").strip() or None,
         # Never stored in plaintext.
         "access_token_encrypted": encrypt_token(access_token),
         "refresh_token_encrypted": encrypt_token(refresh_token),
@@ -425,18 +431,35 @@ def ensure_access_token(supabase, connection: Dict) -> str:
     expires_at = _parse_iso(connection.get("token_expires_at"))
     now = _now()
 
-    if access_token and (expires_at is None or expires_at > now + timedelta(minutes=2)):
-        return access_token
+    if not (access_token and (expires_at is None or expires_at > now + timedelta(minutes=2))):
+        refresh_token = decrypt_token(connection.get("refresh_token_encrypted") or "")
+        bundle = gmail_client.refresh_access_token(refresh_token)
+        access_token = bundle.access_token
+        update_connection_fields(supabase, connection["user_id"], {
+            "access_token_encrypted": encrypt_token(bundle.access_token),
+            "token_expires_at": _iso(bundle.expires_at),
+            "status": "connected",
+        })
 
-    refresh_token = decrypt_token(connection.get("refresh_token_encrypted") or "")
-    bundle = gmail_client.refresh_access_token(refresh_token)
+    # Repair connections stored before the mailbox address was verified.
+    # Only a real, non-empty address is written back.
+    if not (connection.get("mailbox_email") or "").strip():
+        try:
+            resolved = gmail_client.fetch_mailbox_email(access_token)
+        except MailboxError as e:
+            logger.warning(
+                "Could not resolve the mailbox address while repairing the "
+                "connection (%s).", getattr(e, "code", "mailbox_error"),
+            )
+        else:
+            if resolved:
+                update_connection_fields(
+                    supabase, connection["user_id"], {"mailbox_email": resolved}
+                )
+                connection["mailbox_email"] = resolved
+                logger.info("Repaired the stored mailbox address for this connection.")
 
-    update_connection_fields(supabase, connection["user_id"], {
-        "access_token_encrypted": encrypt_token(bundle.access_token),
-        "token_expires_at": _iso(bundle.expires_at),
-        "status": "connected",
-    })
-    return bundle.access_token
+    return access_token
 
 
 # -------------------------------------------------------------------

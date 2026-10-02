@@ -43,9 +43,14 @@ class Settings:
             # development working without hard-coding a host.
             self.gmail_redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "").strip()
             # Read-only scopes only: no send, no modify, no mailbox deletion.
+            # openid/userinfo.* resolve the account address; gmail.readonly is
+            # the mailbox read grant and is what actually authorizes
+            # users/me/profile, the endpoint that reports emailAddress.
             self.gmail_scopes = [
-                "https://www.googleapis.com/auth/gmail.readonly",
+                "openid",
                 "https://www.googleapis.com/auth/userinfo.email",
+                "https://www.googleapis.com/auth/userinfo.profile",
+                "https://www.googleapis.com/auth/gmail.readonly",
             ]
             # Fernet key used to encrypt OAuth refresh tokens at rest.
             # When unset, a key is derived from the Supabase key (still
@@ -80,8 +85,10 @@ class Settings:
             self.gmail_client_secret = ""
             self.gmail_redirect_uri = ""
             self.gmail_scopes = [
-                "https://www.googleapis.com/auth/gmail.readonly",
+                "openid",
                 "https://www.googleapis.com/auth/userinfo.email",
+                "https://www.googleapis.com/auth/userinfo.profile",
+                "https://www.googleapis.com/auth/gmail.readonly",
             ]
             self.mailbox_token_encryption_key = ""
             self.mailbox_sync_min_interval = 300

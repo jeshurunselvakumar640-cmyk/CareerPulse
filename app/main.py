@@ -1111,3 +1111,21 @@ async def serve_dashboard_app():
         response.headers["Cache-Control"] = "no-store"
         return response
     return JSONResponse(content={"status": "CareerPulse API active"}, status_code=200)
+
+@app.get("/privacy")
+async def serve_privacy_policy():
+    """Public Privacy Policy. Accessible without authentication."""
+    response = _serve_frontend_file("privacy.html")
+    if response is not None:
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    return JSONResponse(content={"status": "Privacy policy not available"}, status_code=404)
+
+@app.get("/terms")
+async def serve_terms_of_service():
+    """Public Terms of Service. Accessible without authentication."""
+    response = _serve_frontend_file("terms.html")
+    if response is not None:
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    return JSONResponse(content={"status": "Terms of service not available"}, status_code=404)

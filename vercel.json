@@ -1,14 +1,4 @@
 {
-    "rewrites": [
-        {
-            "source": "/api/(.*)",
-            "destination": "/app/main.py"
-        },
-        {
-            "source": "/(.*)",
-            "destination": "/index.html"
-        }
-    ],
     "crons": [
         {
             "path": "/api/digest/send",

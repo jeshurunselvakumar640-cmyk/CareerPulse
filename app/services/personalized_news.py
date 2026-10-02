@@ -835,8 +835,13 @@ def _run_pipeline_sync(profile: Dict[str, Any], limit: int,
     """Blocking implementation, executed in a worker thread."""
 
     # --- 1. dynamic queries from the profile ---
+    _diag_t0 = time.time()
+    logger.info("NEWS_DEBUG: query_generation_start")
     queries = generate_news_queries(profile)
+    logger.info("NEWS_DEBUG: query_generation_complete queries=%d elapsed=%.1fs",
+                len(queries), time.time() - _diag_t0)
     if not queries:
+        logger.info("NEWS_DEBUG: pipeline_complete articles=0 reason=no_queries")
         return []
 
     # --- 2. Tavily discovery ---
@@ -845,6 +850,8 @@ def _run_pipeline_sync(profile: Dict[str, Any], limit: int,
     seen_canon: Set[str] = set()
     search_failures = 0
 
+    _diag_tavily = time.time()
+    logger.info("NEWS_DEBUG: tavily_discovery_start queries=%d", len(queries))
     for q in queries:
         try:
             resp = client.search(
@@ -874,6 +881,9 @@ def _run_pipeline_sync(profile: Dict[str, Any], limit: int,
                 "matched_query": q,
             })
 
+    logger.info("NEWS_DEBUG: tavily_discovery_complete results=%d failures=%d elapsed=%.1fs",
+                len(candidates), search_failures, time.time() - _diag_tavily)
+
     if not candidates and search_failures == len(queries):
         raise NewsUnavailable("Search backend is unavailable. Please try again shortly.")
 
@@ -881,6 +891,8 @@ def _run_pipeline_sync(profile: Dict[str, Any], limit: int,
 
     # --- 3. retrieve actual source pages + verify ---
     verified: List[Dict[str, Any]] = []
+    _diag_fetch = time.time()
+    logger.info("NEWS_DEBUG: source_fetch_start pages=%d", len(candidates))
     for cand in candidates:
         art = fetch_and_verify_article(cand["url"])
         if not art:
@@ -891,25 +903,34 @@ def _run_pipeline_sync(profile: Dict[str, Any], limit: int,
         art["matched_query"] = cand["matched_query"]
         verified.append(art)
 
+    logger.info("NEWS_DEBUG: source_fetch_complete pages=%d elapsed=%.1fs",
+                len(verified), time.time() - _diag_fetch)
+
     if not verified:
+        logger.info("NEWS_DEBUG: pipeline_complete articles=0 reason=no_verified_articles")
         return []
 
     # --- 4. deduplicate ---
     verified = deduplicate_articles(verified)
 
     # --- 5. deterministic pre-rank, then keep a bounded candidate set ---
+    logger.info("NEWS_DEBUG: ranking_start articles=%d", len(verified))
     for art in verified:
         art["deterministic_score"], art["det_interests"], art["det_skills"] = \
             _deterministic_relevance(art, profile)
 
     verified.sort(key=lambda a: (a["deterministic_score"], -a["age_hours"]), reverse=True)
     candidates_scored = verified[:max(limit * 2, 12)]
+    logger.info("NEWS_DEBUG: ranking_complete candidates=%d", len(candidates_scored))
 
     # --- 6. Gemini relevance analysis, with deterministic fallback ---
     final: List[Dict[str, Any]] = []
     gem_client = genai.Client(api_key=settings.gemini_api_key) if settings.gemini_api_key else None
 
     if gem_client:
+        _diag_gemini = time.time()
+        logger.info("NEWS_DEBUG: gemini_start candidates=%d", len(candidates_scored))
+
         async def run_analysis():
             try:
                 return await _analyze_with_gemini(gem_client, candidates_scored, profile)
@@ -935,6 +956,10 @@ def _run_pipeline_sync(profile: Dict[str, Any], limit: int,
             if analysis.get("relevant"):
                 final.append({**art, **analysis})
 
+    if gem_client:
+        logger.info("NEWS_DEBUG: gemini_complete articles=%d elapsed=%.1fs",
+                    len(final), time.time() - _diag_gemini)
+
     # --- 7. final ranking: relevance first, then recency, then source trust ---
     def rank_key(a: Dict[str, Any]):
         return (
@@ -943,6 +968,7 @@ def _run_pipeline_sync(profile: Dict[str, Any], limit: int,
             -float(a.get("age_hours", 999)),
         )
 
+    logger.info("NEWS_DEBUG: shaping_start articles=%d", len(final))
     final.sort(key=rank_key, reverse=True)
     final = final[:limit]
     final = deduplicate_articles(final, similarity=0.7)
@@ -966,6 +992,8 @@ def _run_pipeline_sync(profile: Dict[str, Any], limit: int,
             "source_trusted": a.get("source_trusted", False),
             "verified": True,
         })
+    logger.info("NEWS_DEBUG: shaping_complete articles=%d", len(clean))
+    logger.info("NEWS_DEBUG: pipeline_complete articles=%d", len(clean))
     return clean
 
 
@@ -986,8 +1014,11 @@ async def get_personalized_news(
     user_id = profile.get("user_id") or "anonymous"
     fingerprint = profile_fingerprint(profile)
     now = time.time()
+    logger.info("NEWS_DEBUG: pipeline_start limit=%s refresh=%s", limit, bool(refresh))
 
+    logger.info("NEWS_DEBUG: cache_start operation=read")
     cached = _get_cache(supabase_client, user_id)
+    logger.info("NEWS_DEBUG: cache_complete operation=read hit=%s", bool(cached))
 
     if (cached
             and cached.get("fingerprint") == fingerprint
@@ -1022,16 +1053,26 @@ async def get_personalized_news(
     if not settings.tavily_api_key:
         return {"status": "error", "articles": [], "detail": "Search backend is not configured.", "cache": "bypass"}
 
+    _diag_thread = time.time()
     try:
         articles = await asyncio.to_thread(_run_pipeline_sync, profile, limit, supabase_client)
+    except asyncio.CancelledError:
+        logger.exception("NEWS_DEBUG: pipeline_cancelled")
+        raise
     except NewsUnavailable as e:
         return {"status": "error", "articles": [], "detail": str(e), "cache": "bypass"}
     except Exception as e:
         logger.exception("Personalized news pipeline failure")
         return {"status": "error", "articles": [], "detail": f"News retrieval failed: {e}", "cache": "bypass"}
 
-    _set_cache(supabase_client, user_id, fingerprint, articles)
+    logger.info("NEWS_DEBUG: pipeline_thread_returned articles=%d elapsed=%.1fs",
+                len(articles), time.time() - _diag_thread)
 
+    logger.info("NEWS_DEBUG: cache_start operation=write")
+    _set_cache(supabase_client, user_id, fingerprint, articles)
+    logger.info("NEWS_DEBUG: cache_complete operation=write")
+
+    logger.info("NEWS_DEBUG: pipeline_complete stage=api_return articles=%d", len(articles))
     return {
         "status": "success",
         "articles": articles,

@@ -6,35 +6,79 @@ from html.parser import HTMLParser
 from typing import Optional, Dict, Any, List
 from urllib.parse import urlparse
 
+_SKIP_TAGS = {'script', 'style', 'svg', 'nav', 'header', 'footer', 'aside', 'noscript',
+              'form', 'button', 'select', 'template', 'iframe', 'canvas'}
+
+_HIDDEN_STYLE_RE = re.compile(r'display\s*:\s*none|visibility\s*:\s*hidden', re.IGNORECASE)
+
+
+def _is_hidden_element(attrs) -> bool:
+    """
+    True only for genuinely hidden elements.
+
+    The previous check treated the substring "hidden" anywhere in the attribute
+    string as "hidden", so a single `aria-hidden="false"` icon on a modern page
+    permanently disabled text extraction for the rest of the document.
+    """
+    attr_map = {k.lower(): (v if v is not None else "") for k, v in attrs}
+    if attr_map.get("aria-hidden", "").strip().lower() == "true":
+        return True
+    if "hidden" in attr_map and attr_map["hidden"].strip().lower() not in ("false", "0"):
+        return True
+    style = attr_map.get("style", "")
+    if style and _HIDDEN_STYLE_RE.search(style):
+        return True
+    return False
+
+
 class HTMLTextExtractor(HTMLParser):
     """
     Strips scripts, styles, SVGs, nav, headers, footers, forms,
     and extracts only clean visible text.
     """
     def __init__(self):
-        super().__init__()
+        super().__init__(convert_charrefs=True)
         self.text_chunks: List[str] = []
-        self.skip_depth = 0
+        # Stack of (tag, is_hidden) so an end tag always closes the element it
+        # belongs to, even when the markup is unbalanced.
+        self._stack: List[Any] = []
+
+    def _skipping(self) -> bool:
+        return bool(self._stack) and self._stack[-1][1]
 
     def handle_starttag(self, tag, attrs):
-        if tag in ['script', 'style', 'svg', 'nav', 'header', 'footer', 'aside', 'noscript', 'form', 'button', 'select']:
-            self.skip_depth += 1
-        else:
-            # Check for contaminated CSS markers or hidden components
-            attr_str = " ".join([f"{k}='{v}'" for k, v in attrs]).lower()
-            if any(marker in attr_str for marker in ['display: none', 'visibility: hidden', 'hidden']):
-                self.skip_depth += 1
+        parent_skip = self._skipping()
+        if tag in _SKIP_TAGS:
+            self._stack.append((tag, True))
+            return
+        self._stack.append((tag, parent_skip or _is_hidden_element(attrs)))
+
+    def handle_startendtag(self, tag, attrs):
+        # Self-closing element: nothing to skip beyond the tag itself.
+        if tag in _SKIP_TAGS:
+            return
+        if self._skipping():
+            return
 
     def handle_endtag(self, tag):
-        if tag in ['script', 'style', 'svg', 'nav', 'header', 'footer', 'aside', 'noscript', 'form', 'button', 'select']:
-            if self.skip_depth > 0:
-                self.skip_depth -= 1
+        if not self._stack:
+            return
+        # Unwind to the matching open tag so stray end tags cannot corrupt the
+        # state for the remainder of the document.
+        for index in range(len(self._stack) - 1, -1, -1):
+            if self._stack[index][0] == tag:
+                del self._stack[index:]
+                return
+        # No matching open tag: drop a single level to stay balanced.
+        self._stack.pop()
 
     def handle_data(self, data):
-        if self.skip_depth == 0:
-            cleaned = data.strip()
-            if cleaned:
-                self.text_chunks.append(cleaned)
+        if self._skipping():
+            return
+        cleaned = data.strip()
+        if cleaned:
+            self.text_chunks.append(cleaned)
+
 
 
 def clean_page_html(raw_html: str) -> str:

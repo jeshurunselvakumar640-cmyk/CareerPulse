@@ -2,8 +2,10 @@ from fastapi.responses import FileResponse
 import os
 import re
 import json
+import hmac
 import logging
 import asyncio
+import secrets
 from datetime import datetime, timedelta
 import zoneinfo
 from fastapi import FastAPI, Request, HTTPException, Header, Depends
@@ -31,6 +33,9 @@ from app.services.daily_digest import (
     is_digest_already_sent_today,
     load_local_digest_history
 )
+from app.services import gmail_client
+from app.services.gmail_client import MailboxError, MailboxNotConfigured
+from app.services import reply_tracker
 
 logging.basicConfig(
     level=logging.INFO,
@@ -160,6 +165,12 @@ class EmailTestRequest(BaseModel):
 
 class DigestTriggerRequest(BaseModel):
     force: Optional[bool] = False
+
+class ReplySyncRequest(BaseModel):
+    force: Optional[bool] = False
+
+class ReplyDraftRequest(BaseModel):
+    opportunity_id: str
 
 # -------------------------------------------------------------------
 # AUTH & TOKEN HELPERS
@@ -599,20 +610,24 @@ async def send_outreach_email(req: EmailSendRequest, auth_tuple=Depends(require_
         raise HTTPException(status_code=400, detail="Email body content cannot be empty.")
 
     try:
-        send_email(req.to_email, req.subject, req.body)
+        sent_message_id = send_email(req.to_email, req.subject, req.body)
 
-        log_payload = {
-            "user_id": user.id,
-            "opportunity_id": req.opportunity_id,
-            "recipient_email": req.to_email,
-            "subject": req.subject,
-            "body": req.body,
-            "status": "Sent"
-        }
-        try:
-            supabase.table("email_logs").insert(log_payload).execute()
-        except Exception as db_err:
-            logger.warning("Supabase email logging warning: %s", db_err)
+        # Durable record of the outreach email. The existing email_logs table is
+        # reused (it already stores user_id, opportunity_id, recipient_email,
+        # subject, body, status, sent_at) and extended with the message id and
+        # provider thread fields so a company reply can be matched later.
+        reply_tracker.record_sent_email(
+            supabase=supabase,
+            user_id=user.id,
+            opportunity_id=req.opportunity_id,
+            recipient_email=req.to_email,
+            sender_email=settings.smtp_user,
+            subject=req.subject,
+            body=req.body,
+            message_id=sent_message_id or "",
+            company=req.company or "",
+            title=req.title or "",
+        )
 
         return {"status": "success", "message": "Email sent successfully"}
     except Exception as e:
@@ -649,6 +664,225 @@ async def email_test(req: Optional[EmailTestRequest] = None):
         return {"status": "success", "message": "SMTP transport operational."}
     else:
         raise HTTPException(status_code=500, detail=smtp_status.get("message", "SMTP connection failed."))
+
+# -------------------------------------------------------------------
+# MAILBOX INTEGRATION & COMPANY REPLIES
+# -------------------------------------------------------------------
+# Reading replies needs a real mailbox connector: SMTP only sends. CareerPulse
+# asks the user for a read-only Gmail grant and stores the resulting tokens
+# encrypted on the server. No token ever reaches the browser.
+
+GMAIL_OAUTH_COOKIE = "cp-gmail-oauth"
+GMAIL_OAUTH_MAX_AGE = 600
+
+# Provider-safe messages for the UI. Raw OAuth/API errors are never returned.
+_MAILBOX_ERROR_MESSAGES = {
+    "not_configured": "Gmail integration is not configured on this server yet.",
+    "auth_error": "Your Gmail connection needs to be renewed. Please reconnect Gmail.",
+    "rate_limited": "Gmail is busy right now. Please try again in a few minutes.",
+    "provider_error": "Gmail could not be reached. Please try again shortly.",
+    "mailbox_error": "The mailbox could not be read. Please try again shortly.",
+    "not_connected": "Connect your Gmail account to receive company replies.",
+    "migration_required": "Reply tracking is not available until the database migration is applied.",
+}
+
+def _mailbox_error_detail(code: str, fallback: str = "") -> str:
+    return _MAILBOX_ERROR_MESSAGES.get(code, fallback or _MAILBOX_ERROR_MESSAGES["mailbox_error"])
+
+def _mailbox_error_status(code: str) -> int:
+    if code == "not_connected":
+        return 409
+    if code == "not_configured":
+        return 503
+    if code == "auth_error":
+        return 401
+    if code == "migration_required":
+        return 503
+    if code == "rate_limited":
+        return 429
+    return 502
+
+def _gmail_redirect_uri(request: Request) -> str:
+    """Prefer the configured URI, otherwise derive it from the live host."""
+    if settings.gmail_redirect_uri:
+        return settings.gmail_redirect_uri
+    base_url = str(request.base_url).rstrip("/")
+    return f"{base_url}/api/email/integration/callback"
+
+@app.get("/api/email/integration/status")
+async def email_integration_status(auth_tuple=Depends(require_auth_token_and_user)):
+    """Render state only: connection flags, mailbox address, scopes, sync time."""
+    _, user = auth_tuple
+    status = reply_tracker.mailbox_integration_status(supabase, user.id)
+    status["unread_replies"] = reply_tracker.count_unread_replies(supabase, user.id)
+    return {"status": "success", **status}
+
+@app.get("/api/email/integration/connect")
+async def email_integration_connect(request: Request, auth_tuple=Depends(require_auth_token_and_user)):
+    """Start Google OAuth. The user is sent to Google's consent screen."""
+    _, user = auth_tuple
+
+    if not gmail_client.is_mailbox_oauth_configured():
+        raise HTTPException(
+            status_code=503,
+            detail=_mailbox_error_detail("not_configured"),
+        )
+
+    redirect_uri = _gmail_redirect_uri(request)
+    state = f"{user.id}.{secrets.token_urlsafe(32)}"
+    try:
+        url = gmail_client.build_authorization_url(state, redirect_uri)
+    except MailboxError as e:
+        raise HTTPException(status_code=503, detail=_mailbox_error_detail(getattr(e, "code", "")))
+
+    response = RedirectResponse(url=url)
+    # httpOnly + SameSite=Lax: the state is not readable by page scripts and
+    # the cookie is returned on Google's top-level redirect back to us.
+    response.set_cookie(
+        key=GMAIL_OAUTH_COOKIE,
+        value=state,
+        httponly=True,
+        samesite="lax",
+        secure=str(request.url.scheme) == "https",
+        max_age=GMAIL_OAUTH_MAX_AGE,
+        path="/",
+    )
+    return response
+
+@app.get("/api/email/integration/callback")
+async def email_integration_callback(request: Request, code: Optional[str] = None, state: Optional[str] = None, error: Optional[str] = None):
+    """
+    Google OAuth redirect target.
+
+    The user identity is re-derived from the existing session cookie, never
+    from anything the provider sends, so one account can never attach another
+    account's mailbox.
+    """
+    _, user = get_current_token_and_user(request, None)
+    if not user:
+        return RedirectResponse(url="/?error=signin_required")
+
+    stored_state = request.cookies.get(GMAIL_OAUTH_COOKIE)
+    if not state or not stored_state or not hmac.compare_digest(state, stored_state):
+        logger.warning("Rejected a Gmail OAuth callback with an invalid state value.")
+        return RedirectResponse(url="/app#applications&mailbox=state_mismatch")
+
+    if error:
+        logger.info("Gmail authorization was not completed: %s", error)
+        return RedirectResponse(url="/app#applications&mailbox=denied")
+
+    if not code:
+        return RedirectResponse(url="/app#applications&mailbox=missing_code")
+
+    try:
+        bundle = gmail_client.exchange_authorization_code(code, _gmail_redirect_uri(request))
+        reply_tracker.save_connection(
+            supabase=supabase,
+            user_id=user.id,
+            access_token=bundle.access_token,
+            refresh_token=bundle.refresh_token,
+            expires_at=bundle.expires_at,
+            scopes=bundle.scopes,
+            mailbox_email=bundle.mailbox_email,
+        )
+    except MailboxNotConfigured as e:
+        logger.warning("Gmail OAuth is not configured: %s", e)
+        return RedirectResponse(url="/app#applications&mailbox=not_configured")
+    except MailboxError as e:
+        code_name = getattr(e, "code", "mailbox_error")
+        logger.warning("Gmail OAuth failed (%s)", code_name)
+        return RedirectResponse(url=f"/app#applications&mailbox={code_name}")
+
+    response = RedirectResponse(url="/app#applications&mailbox=connected")
+    response.delete_cookie(key=GMAIL_OAUTH_COOKIE, path="/")
+    return response
+
+@app.post("/api/email/integration/disconnect")
+async def email_integration_disconnect(auth_tuple=Depends(require_auth_token_and_user)):
+    """Remove the stored mailbox connection and its tokens for this user."""
+    _, user = auth_tuple
+    removed = reply_tracker.disconnect_mailbox(supabase, user.id)
+    return {"status": "success", "disconnected": removed}
+
+@app.post("/api/email/sync")
+async def sync_email_replies(req: Optional[ReplySyncRequest] = None, auth_tuple=Depends(require_auth_token_and_user)):
+    """Check the connected mailbox for new company replies to tracked applications."""
+    _, user = auth_tuple
+    force = bool(req.force) if req else False
+    result = await reply_tracker.sync_replies(supabase, user.id, force=force)
+
+    if result.get("status") == "error":
+        error_code = result.get("error_code") or "mailbox_error"
+        raise HTTPException(status_code=_mailbox_error_status(error_code), detail=result.get("message") or _mailbox_error_detail(error_code))
+    return result
+
+@app.get("/api/email/replies")
+async def list_email_replies(
+    limit: int = 50,
+    unread_only: bool = False,
+    auth_tuple=Depends(require_auth_token_and_user),
+):
+    """Replies linked to the current user's applications. Ownership is server-side."""
+    _, user = auth_tuple
+    replies = reply_tracker.list_replies(supabase, user.id, limit=limit, unread_only=unread_only)
+    return {
+        "status": "success",
+        "replies": replies,
+        "unread_count": reply_tracker.count_unread_replies(supabase, user.id),
+    }
+
+@app.get("/api/email/replies/{reply_id}")
+async def get_email_reply(reply_id: str, auth_tuple=Depends(require_auth_token_and_user)):
+    _, user = auth_tuple
+    reply = reply_tracker.get_reply(supabase, user.id, reply_id)
+    if not reply:
+        raise HTTPException(status_code=404, detail="Reply not found.")
+    return {"status": "success", "reply": reply}
+
+@app.post("/api/email/replies/{reply_id}/read")
+async def mark_email_reply_read(reply_id: str, auth_tuple=Depends(require_auth_token_and_user)):
+    _, user = auth_tuple
+    if not reply_tracker.mark_reply_read(supabase, user.id, reply_id):
+        raise HTTPException(status_code=404, detail="Reply not found.")
+    return {
+        "status": "success",
+        "unread_count": reply_tracker.count_unread_replies(supabase, user.id),
+    }
+
+@app.get("/api/applications")
+async def list_applications(auth_tuple=Depends(require_auth_token_and_user)):
+    """Application communication list: sent, replied, interview requested, etc."""
+    _, user = auth_tuple
+    applications = reply_tracker.list_applications(supabase, user.id)
+    return {
+        "status": "success",
+        "applications": applications,
+        "unread_replies": reply_tracker.count_unread_replies(supabase, user.id),
+    }
+
+@app.get("/api/opportunities/{opportunity_id}/conversation")
+async def get_opportunity_conversation(opportunity_id: str, auth_tuple=Depends(require_auth_token_and_user)):
+    """Full chronological conversation for one opportunity of this user."""
+    _, user = auth_tuple
+    return reply_tracker.get_conversation(supabase, user.id, opportunity_id)
+
+@app.post("/api/email/draft-response")
+async def draft_email_response(req: ReplyDraftRequest, auth_tuple=Depends(require_auth_token_and_user)):
+    """
+    Produce an editable draft response to the latest company reply.
+
+    Nothing is sent. The user reviews the draft and explicitly sends it through
+    the existing email composer.
+    """
+    _, user = auth_tuple
+    if not req.opportunity_id:
+        raise HTTPException(status_code=400, detail="An opportunity id is required.")
+    result = await reply_tracker.draft_reply_response(
+        supabase, user.id, req.opportunity_id, user.user_metadata or {}
+    )
+    if result.get("status") == "error":
+        raise HTTPException(status_code=404, detail=result.get("detail", "Nothing to respond to yet."))
+    return result
 
 # -------------------------------------------------------------------
 # DAILY DIGEST ENDPOINTS

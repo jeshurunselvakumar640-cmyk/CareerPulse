@@ -5,6 +5,23 @@ let currentSwipeIndex = 0;
 let currentEmailPayload = null;
 let currentTechNews = [];
 
+// Application communication / company replies state.
+// Every value here is per-user and is reset on logout so one account can never
+// see another account's applications or replies.
+const applicationsState = {
+    loaded: false,
+    loading: false,
+    integrations: null,
+    integrationError: null,
+    applications: [],
+    byOpportunity: {},
+    unread: 0,
+    lastSyncAt: null,
+    syncNotice: null
+};
+
+let currentConversationId = null;
+
 // Global auth state — prevents rendering before auth is resolved
 const authState = {
     loading: true,
@@ -14,7 +31,7 @@ const authState = {
 
 const USER_AVATAR_SVG = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 24 24' fill='none' stroke='%23818cf8' stroke-width='1.5'><path d='M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg>`;
 
-const APP_VIEW_HASHES = ["dashboard", "profile", "interested", "waitlist", "news"];
+const APP_VIEW_HASHES = ["dashboard", "profile", "interested", "waitlist", "applications", "news"];
 
 // Personalized tech news state.
 // Kept separate from currentTechNews so opening the tab never re-triggers an
@@ -120,6 +137,21 @@ async function checkBackendHealth() {
  * 2. If authenticated → show UI, navigate to correct view
  * 3. If not authenticated → show login button
  */
+/**
+ * Splits the location hash into the view name and its parameters.
+ * The mailbox OAuth redirect uses "#applications&mailbox=connected".
+ */
+function parseHashLocation() {
+    const raw = (window.location.hash || "").replace(/^#/, "");
+    const [view, ...rest] = raw.split("&");
+    const params = {};
+    rest.forEach(pair => {
+        const [key, value] = pair.split("=");
+        if (key) params[key] = value === undefined ? "" : decodeURIComponent(value);
+    });
+    return { view: (view || "").trim(), params };
+}
+
 async function initializeAuth() {
     try {
         const res = await fetch("/api/user/profile", {
@@ -142,8 +174,16 @@ async function initializeAuth() {
             // After profile loads, also fetch saved jobs
             fetchSupabaseSavedJobs();
 
+            // Mailbox check on open. The server throttles this to a sensible
+            // interval, so this is not a tight poll loop.
+            bootstrapReplies();
+
             // Navigate based on URL hash or profile completeness
-            const hash = window.location.hash.replace("#", "");
+            const location_ = parseHashLocation();
+            const hash = location_.view;
+            if (location_.params.mailbox) {
+                handleMailboxRedirectResult(location_.params.mailbox);
+            }
             if (hash === "profile" && !data.profile_complete) {
                 navigateTo("profile");
             } else if (hash && APP_VIEW_HASHES.includes(hash)) {
@@ -391,6 +431,9 @@ function clearUserState() {
     currentSwipeIndex = 0;
     currentEmailPayload = null;
     currentTechNews = [];
+    // Application communication is per-user: never let one account see
+    // another account's sent emails or company replies.
+    resetApplicationsState();
     // Personalized news is per-user: never let one account see another's feed.
     resetPersonalizedNews();
     authState.authenticated = false;
@@ -464,7 +507,592 @@ function navigateTo(view) {
 
     // Load personalized news the first time the tab is opened only.
     if (view === "news") loadPersonalizedNews();
+    if (view === "applications") loadApplicationsView();
 }
+
+/* ------------------------------------------------------------------
+ * APPLICATION COMMUNICATION & COMPANY REPLIES
+ *
+ * Replies come from the user's own connected mailbox (read-only Gmail
+ * grant). CareerPulse only ever shows messages it could confidently link to
+ * an outreach email it sent, and it never replies to a company on its own.
+ * ------------------------------------------------------------------ */
+
+function resetApplicationsState() {
+    applicationsState.loaded = false;
+    applicationsState.loading = false;
+    applicationsState.integration = null;
+    applicationsState.integrationError = null;
+    applicationsState.applications = [];
+    applicationsState.byOpportunity = {};
+    applicationsState.unread = 0;
+    applicationsState.lastSyncAt = null;
+    applicationsState.syncNotice = null;
+    currentConversationId = null;
+
+    ["applicationsContainer", "mailboxIntegrationCard", "repliesNotification"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = "";
+    });
+    const badge = document.getElementById("applicationsUnreadBadge");
+    if (badge) {
+        badge.classList.add("hidden");
+        badge.textContent = "0";
+    }
+    const modal = document.getElementById("conversationModal");
+    if (modal) modal.classList.add("hidden");
+}
+
+function handleMailboxRedirectResult(result) {
+    const messages = {
+        connected: "Gmail connected. Company replies will appear here.",
+        denied: "Gmail access was not granted. You can connect it any time.",
+        state_mismatch: "That Gmail authorization request expired. Please try connecting again.",
+        missing_code: "Gmail did not return an authorization code. Please try again.",
+        not_configured: "Gmail integration is not configured on this server yet.",
+        auth_error: "Gmail could not be authorized. Please try again.",
+        provider_error: "Gmail could not be reached. Please try again shortly."
+    };
+    applicationsState.syncNotice = {
+        tone: result === "connected" ? "success" : "warning",
+        text: messages[result] || "The mailbox connection could not be completed."
+    };
+}
+
+function setSyncBusy(busy) {
+    const btn = document.getElementById("btnSyncReplies");
+    const label = document.getElementById("syncRepliesLabel");
+    const icon = document.getElementById("syncRepliesIcon");
+    if (btn) btn.disabled = busy;
+    if (label) label.textContent = busy ? "Checking…" : "Sync Replies";
+    if (icon) icon.style.opacity = busy ? "0.4" : "1";
+}
+
+function formatTimestamp(value) {
+    if (!value) return "—";
+    const parsed = new Date(value);
+    if (isNaN(parsed.getTime())) return "—";
+    return parsed.toLocaleString([], {
+        day: "numeric", month: "short", year: "numeric",
+        hour: "2-digit", minute: "2-digit"
+    });
+}
+
+function applicationStatusTone(status) {
+    const map = {
+        "Reply Received": "indigo",
+        "Interview Requested": "emerald",
+        "Interview Scheduled": "emerald",
+        "Additional Information Requested": "amber",
+        "Application Received": "sky",
+        "Rejected": "rose",
+        "Email Sent": "slate"
+    };
+    return map[status] || "slate";
+}
+
+function updateUnreadBadge() {
+    const badge = document.getElementById("applicationsUnreadBadge");
+    if (!badge) return;
+    const count = applicationsState.unread || 0;
+    badge.textContent = count > 99 ? "99+" : String(count);
+    if (count > 0) badge.classList.remove("hidden");
+    else badge.classList.add("hidden");
+}
+
+function renderMailboxIntegration() {
+    const card = document.getElementById("mailboxIntegrationCard");
+    if (!card) return;
+
+    const integration = applicationsState.integration;
+    if (!integration) {
+        card.innerHTML = applicationsState.integrationError
+            ? `<p class="text-xs text-rose-300">${escapeHtml(applicationsState.integrationError)}</p>`
+            : `<p class="text-xs text-slate-400">Checking your mailbox connection…</p>`;
+        return;
+    }
+
+    const scopeNote = "Read-only access to receive replies. CareerPulse cannot send, delete, or modify mail through this connection.";
+
+    if (!integration.configured) {
+        card.innerHTML = `
+            <div class="space-y-2">
+                <h3 class="text-sm font-bold text-white">Email Integration</h3>
+                <p class="text-xs text-slate-400">Gmail integration is not configured on this server yet, so replies
+                    cannot be imported. Sending outreach emails is unaffected.</p>
+                <p class="text-[11px] text-slate-500">An administrator needs to add the Google OAuth credentials.</p>
+            </div>`;
+        return;
+    }
+
+    if (!integration.connected) {
+        const needsReconnect = integration.needs_reconnect;
+        card.innerHTML = `
+            <div class="space-y-3">
+                <div class="space-y-1">
+                    <h3 class="text-sm font-bold text-white">Email Integration</h3>
+                    <p class="text-xs text-slate-400">${needsReconnect
+                        ? "Your Gmail connection expired or was revoked. Reconnect to keep receiving company replies."
+                        : "Connect your Gmail account to receive company replies inside CareerPulse."}</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button onclick="connectGmailMailbox()"
+                        class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition">${needsReconnect ? "Reconnect Gmail" : "Connect Gmail"}</button>
+                </div>
+                <p class="text-[11px] text-slate-500">${escapeHtml(scopeNote)} You will be asked to approve read-only
+                    access on Google's consent screen. Your password is never shared with CareerPulse.</p>
+            </div>`;
+        return;
+    }
+
+    card.innerHTML = `
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div class="space-y-1">
+                <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                    <span class="text-emerald-400">&#10003;</span> Gmail connected
+                    ${integration.needs_reconnect ? '<span class="text-[10px] font-bold text-amber-400 uppercase">needs renewal</span>' : ""}
+                </h3>
+                <p class="text-xs text-slate-400">Email: <span class="text-slate-200">${escapeHtml(integration.email || "Not reported")}</span></p>
+                <p class="text-[11px] text-slate-500">Last checked: ${escapeHtml(integration.last_sync_at ? formatTimestamp(integration.last_sync_at) : "Not yet synced")}</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <button onclick="syncReplies(true)"
+                    class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition border border-slate-700">Sync Replies</button>
+                <button onclick="disconnectMailbox()"
+                    class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-rose-600 hover:text-white text-slate-300 text-xs font-bold transition">Disconnect</button>
+            </div>
+        </div>
+        <p class="text-[11px] text-slate-500 pt-3 mt-3 border-t border-slate-800">${escapeHtml(scopeNote)}</p>`;
+}
+
+function renderReplyNotification() {
+    const banner = document.getElementById("repliesNotification");
+    if (!banner) return;
+
+    const notice = applicationsState.syncNotice;
+    if (!notice) {
+        banner.classList.add("hidden");
+        banner.innerHTML = "";
+        return;
+    }
+
+    const newest = applicationsState.applications.find(a => a.unread_count > 0);
+    const toneClasses = notice.tone === "success"
+        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-200"
+        : "bg-amber-500/10 border-amber-500/30 text-amber-200";
+
+    banner.className = `p-4 rounded-2xl border space-y-3 ${toneClasses}`;
+    banner.innerHTML = `
+        <p class="text-xs font-bold">${escapeHtml(notice.text)}</p>
+        ${newest ? `
+            <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div class="min-w-0">
+                    <p class="text-xs font-bold text-white">${escapeHtml(newest.company)}</p>
+                    <p class="text-[11px] text-slate-400">${escapeHtml(newest.title)}</p>
+                    <p class="text-[11px] text-slate-300 mt-1 truncate">${escapeHtml(newest.last_reply_preview || "New company reply")}</p>
+                </div>
+                <button onclick="openConversation('${escapeHtml(newest.opportunity_id).replace(/'/g, "\\'")}')"
+                    class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shrink-0">View Reply</button>
+            </div>` : ""}`;
+}
+
+function renderApplicationsList() {
+    const container = document.getElementById("applicationsContainer");
+    if (!container) return;
+
+    const notice = applicationsState.syncNotice;
+
+    if (!applicationsState.applications.length) {
+        const message = notice && notice.tone === "success"
+            ? "No company replies yet. Applications appear here as soon as you send an outreach email."
+            : "No outreach emails have been sent from CareerPulse yet. Applications will appear here once you send one.";
+        container.innerHTML = `
+            <div class="p-8 rounded-2xl bg-slate-900 border border-slate-800 text-center space-y-3">
+                <p class="text-sm text-slate-300 font-semibold">${escapeHtml(message)}</p>
+                <button onclick="navigateTo('interested')"
+                    class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition">Go to Interested Jobs</button>
+            </div>`;
+        return;
+    }
+
+    container.innerHTML = applicationsState.applications.map(app => {
+        const tone = applicationStatusTone(app.status);
+        const isReplied = app.reply_count > 0;
+        const unread = app.unread_count > 0;
+        const preview = app.last_reply_preview || "No reply received yet.";
+        const label = unread ? `${app.unread_count} new repl${app.unread_count === 1 ? "y" : "ies"}` : `${app.reply_count} repl${app.reply_count === 1 ? "y" : "ies"}`;
+
+        return `
+        <div class="p-4 rounded-2xl bg-slate-900 border ${unread ? "border-indigo-500/40" : "border-slate-800"} space-y-3 shadow-lg">
+            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                <div class="min-w-0">
+                    <h4 class="text-sm font-bold text-white truncate">${escapeHtml(app.title)}</h4>
+                    <p class="text-xs text-indigo-400 truncate">${escapeHtml(app.company)}${app.recipient_email ? ` • ${escapeHtml(app.recipient_email)}` : ""}</p>
+                </div>
+                <span class="self-start px-2.5 py-1 rounded-lg bg-${tone}-500/15 text-${tone}-300 border border-${tone}-500/30 text-[10px] font-bold uppercase tracking-wide shrink-0">${escapeHtml(app.status)}</span>
+            </div>
+
+            <div class="space-y-1 text-[11px] text-slate-400">
+                ${app.last_sent_at ? `<p>&#10003; Email sent: ${escapeHtml(formatTimestamp(app.last_sent_at))}${app.sent_count > 1 ? ` (${app.sent_count} emails)` : ""}</p>` : ""}
+                ${isReplied ? `<p>${unread ? "&#128172;" : "&#8226;"} ${label} &middot; ${escapeHtml(formatTimestamp(app.last_reply_at))}</p>` : (app.last_sent_at ? "<p>No reply received yet.</p>" : "<p>Email not sent</p>")}
+            </div>
+
+            ${isReplied ? `<p class="text-[11px] text-slate-300 italic border-l-2 border-slate-700 pl-2">${escapeHtml(preview)}</p>` : ""}
+
+            <div class="flex flex-wrap gap-2">
+                <button onclick="openConversation('${escapeHtml(app.opportunity_id).replace(/'/g, "\\'")}')"
+                    class="px-3.5 py-1.5 rounded-lg ${unread ? "bg-indigo-600 hover:bg-indigo-500 text-white" : "bg-slate-800 hover:bg-slate-700 text-slate-200"} text-xs font-bold transition">View Conversation</button>
+            </div>
+        </div>`;
+    }).join("");
+}
+
+async function loadMailboxStatus() {
+    try {
+        const authHeaders = await getAuthHeader();
+        const res = await fetch("/api/email/integration/status", {
+            headers: { ...authHeaders },
+            credentials: "same-origin"
+        });
+        if (res.status === 401) {
+            // Session validity is decided by /api/user/profile, so a 401 on this
+            // background probe must not sign the user out.
+            applicationsState.integration = null;
+            applicationsState.integrationError = null;
+            return;
+        }
+        const data = await res.json();
+        if (res.ok) {
+            applicationsState.integration = data;
+            applicationsState.unread = data.unread_replies || 0;
+            updateUnreadBadge();
+            renderMailboxIntegration();
+            renderReplyNotification();
+        } else {
+            applicationsState.integrationError = data.detail || "Could not read the mailbox connection.";
+            renderMailboxIntegration();
+        }
+    } catch (e) {
+        console.warn("Mailbox status unavailable");
+        applicationsState.integrationError = "Could not reach the server.";
+        renderMailboxIntegration();
+    }
+}
+
+async function loadApplications() {
+    try {
+        const authHeaders = await getAuthHeader();
+        const res = await fetch("/api/applications", {
+            headers: { ...authHeaders },
+            credentials: "same-origin"
+        });
+        if (res.status === 401) {
+            handleExpiredToken();
+            return;
+        }
+        const data = await res.json();
+        if (res.ok && data.status === "success") {
+            applicationsState.applications = data.applications || [];
+            applicationsState.byOpportunity = {};
+            applicationsState.applications.forEach(app => {
+                applicationsState.byOpportunity[app.opportunity_id] = app;
+            });
+            applicationsState.unread = data.unread_replies || 0;
+            applicationsState.loaded = true;
+            updateUnreadBadge();
+            renderApplicationsList();
+            // The Interested view shows a communication strip per opportunity.
+            renderInterestedList();
+        }
+    } catch (e) {
+        console.warn("Could not load applications");
+    }
+}
+
+function loadApplicationsView() {
+    if (applicationsState.loading) return;
+    applicationsState.loading = true;
+    renderApplicationsList();
+    loadMailboxStatus();
+    loadApplications().finally(() => {
+        applicationsState.loading = false;
+    });
+}
+
+async function bootstrapReplies() {
+    await loadMailboxStatus();
+    const integration = applicationsState.integration;
+    if (integration && integration.configured && integration.connected && !integration.needs_reconnect) {
+        await syncReplies(false);
+    }
+}
+
+function connectGmailMailbox() {
+    // Server-side OAuth redirect: the browser never sees a client secret or token.
+    window.location.href = "/api/email/integration/connect";
+}
+
+async function disconnectMailbox() {
+    try {
+        const authHeaders = await getAuthHeader();
+        const res = await fetch("/api/email/integration/disconnect", {
+            method: "POST",
+            headers: { ...authHeaders },
+            credentials: "same-origin"
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+            applicationsState.integration = { configured: true, connected: false };
+            applicationsState.unread = 0;
+            updateUnreadBadge();
+            renderMailboxIntegration();
+            showToast("Gmail disconnected. No mailbox data is stored.");
+        } else {
+            showToast(data.detail || "Could not disconnect Gmail.");
+        }
+    } catch (e) {
+        showToast("Could not reach the server.");
+    }
+}
+
+async function syncReplies(force) {
+    setSyncBusy(true);
+    try {
+        const authHeaders = await getAuthHeader();
+        const res = await fetch("/api/email/sync", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...authHeaders },
+            body: JSON.stringify({ force: !!force }),
+            credentials: "same-origin"
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (res.status === 401) {
+            // Throttled background sync; a stale session here must not force a
+            // logout while /api/user/profile still reports a valid session.
+            return;
+        }
+        if (res.ok && data.status === "success") {
+            const tone = data.inserted > 0 ? "success" : "info";
+            applicationsState.syncNotice = {
+                tone,
+                text: data.skipped
+                    ? data.message
+                    : (data.inserted > 0
+                        ? `${data.inserted} new company repl${data.inserted === 1 ? "y" : "ies"} received.`
+                        : data.message)
+            };
+            await loadMailboxStatus();
+            await loadApplications();
+            renderReplyNotification();
+        } else {
+            applicationsState.syncNotice = { tone: "warning", text: data.detail || "Replies could not be checked right now." };
+            renderReplyNotification();
+            renderMailboxIntegration();
+            if (data.detail) showToast(data.detail);
+        }
+    } catch (e) {
+        showToast("Could not reach the server.");
+    } finally {
+        setSyncBusy(false);
+    }
+}
+
+function closeConversation() {
+    const modal = document.getElementById("conversationModal");
+    if (modal) modal.classList.add("hidden");
+    currentConversationId = null;
+}
+
+async function openConversation(opportunityId) {
+    const modal = document.getElementById("conversationModal");
+    const messagesEl = document.getElementById("conversationMessages");
+    if (!modal || !messagesEl) return;
+
+    currentConversationId = opportunityId;
+    modal.classList.remove("hidden");
+    messagesEl.innerHTML = `<p class="text-xs text-slate-400">Loading conversation…</p>`;
+
+    try {
+        const authHeaders = await getAuthHeader();
+        const res = await fetch(`/api/opportunities/${encodeURIComponent(opportunityId)}/conversation`, {
+            headers: { ...authHeaders },
+            credentials: "same-origin"
+        });
+        if (res.status === 401) {
+            handleExpiredToken();
+            return;
+        }
+        const data = await res.json();
+        if (!res.ok) {
+            messagesEl.innerHTML = `<p class="text-xs text-rose-300">${escapeHtml(data.detail || "Conversation unavailable.")}</p>`;
+            return;
+        }
+        renderConversation(data);
+        markConversationRepliesRead(data.messages || []);
+    } catch (e) {
+        messagesEl.innerHTML = `<p class="text-xs text-rose-300">Could not reach the server.</p>`;
+    }
+}
+
+function renderConversation(data) {
+    const application = data.application || {};
+    const titleEl = document.getElementById("conversationTitle");
+    const subtitleEl = document.getElementById("conversationSubtitle");
+    const stripEl = document.getElementById("conversationStatusStrip");
+    const messagesEl = document.getElementById("conversationMessages");
+    if (!messagesEl) return;
+
+    if (titleEl) titleEl.textContent = application.title || "Conversation";
+    if (subtitleEl) subtitleEl.textContent = `${application.company || ""} • ${data.opportunity_id}`;
+
+    const tone = applicationStatusTone(application.status);
+    if (stripEl) {
+        stripEl.innerHTML = `
+            <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 flex flex-wrap items-center gap-2">
+                <span class="px-2.5 py-1 rounded-lg bg-${tone}-500/15 text-${tone}-300 border border-${tone}-500/30 text-[10px] font-bold uppercase tracking-wide">${escapeHtml(application.status || "")}</span>
+                <span class="text-[11px] text-slate-400">${application.reply_count ? `${application.reply_count} reply message(s)` : "No replies yet"}</span>
+            </div>`;
+    }
+
+    const messages = data.messages || [];
+    if (!messages.length) {
+        messagesEl.innerHTML = `<p class="text-xs text-slate-500 italic">No messages recorded for this application yet.</p>`;
+        return;
+    }
+
+    messagesEl.innerHTML = messages.map(msg => {
+        const inbound = msg.direction === "inbound";
+        const unread = inbound && msg.is_read === false;
+        const alignment = inbound ? "ml-auto max-w-[85%]" : "mr-auto max-w-[85%]";
+        const bubble = inbound
+            ? "bg-slate-800 border-slate-700"
+            : "bg-indigo-600/15 border-indigo-500/30";
+        const who = inbound
+            ? (msg.from_name || msg.from_email || "Company")
+            : "You";
+
+        const meta = [];
+        if (msg.classification && msg.classification !== "unknown") {
+            meta.push(`<span class="px-2 py-0.5 rounded bg-slate-950 border border-slate-700 text-[10px] font-bold uppercase tracking-wide">${escapeHtml(String(msg.classification).replace(/_/g, " "))}</span>`);
+        }
+        if (msg.match_method) {
+            meta.push(`<span class="text-[10px] text-slate-500" title="How this reply was linked to your application">${escapeHtml(String(msg.match_method).replace(/_/g, " "))}</span>`);
+        }
+
+        const attachments = (msg.attachment_names || []).length
+            ? `<p class="text-[11px] text-slate-400 mt-2">&#128206; Attachment received: ${escapeHtml((msg.attachment_names || []).join(", "))}</p>`
+            : "";
+
+        const requested = (msg.requested_information || []).length
+            ? `<div class="mt-2 p-2 rounded-lg bg-slate-950 border border-slate-700 text-[11px] text-slate-300">
+                 <p class="font-bold text-slate-200">Information requested</p>
+                 <ul class="list-disc pl-4 mt-1 space-y-0.5">${msg.requested_information.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+               </div>`
+            : "";
+
+        const body = (msg.body_text || "").split("\n")
+            .map(line => escapeHtml(line))
+            .join("<br>");
+
+        return `
+        <div class="${alignment}">
+            <div class="rounded-2xl border ${bubble} p-4 space-y-2">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-xs font-bold text-white">${escapeHtml(who)}</span>
+                    ${unread ? '<span class="px-1.5 py-0.5 rounded bg-indigo-500 text-white text-[9px] font-bold uppercase">new</span>' : ""}
+                    ${meta.join(" ")}
+                </div>
+                <p class="text-[11px] text-slate-400">${escapeHtml(msg.subject || "(no subject)")} &middot; ${escapeHtml(formatTimestamp(msg.timestamp))}</p>
+                ${msg.classification_summary ? `<p class="text-[11px] text-indigo-300 italic">${escapeHtml(msg.classification_summary)}</p>` : ""}
+                <div class="text-xs text-slate-200 leading-relaxed">${body}</div>
+                ${requested}
+                ${attachments}
+            </div>
+        </div>`;
+    }).join("");
+}
+
+async function markConversationRepliesRead(messages) {
+    const unread = messages.filter(m => m.direction === "inbound" && m.is_read === false);
+    if (!unread.length) return;
+
+    try {
+        const authHeaders = await getAuthHeader();
+        for (const msg of unread) {
+            const res = await fetch(`/api/email/replies/${encodeURIComponent(msg.id)}/read`, {
+                method: "POST",
+                headers: { ...authHeaders },
+                credentials: "same-origin"
+            });
+            if (res.ok) {
+                const data = await res.json().catch(() => ({}));
+                applicationsState.unread = data.unread_count || 0;
+                msg.is_read = true;
+            }
+        }
+        updateUnreadBadge();
+        loadApplications();
+    } catch (e) {
+        // Read-state persistence is best effort; the reply is already shown.
+    }
+}
+
+async function draftResponseAndCompose(opportunityId) {
+    if (!opportunityId) return;
+    showToast("Drafting a response for your review…");
+
+    try {
+        const authHeaders = await getAuthHeader();
+        const res = await fetch("/api/email/draft-response", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...authHeaders },
+            body: JSON.stringify({ opportunity_id: opportunityId }),
+            credentials: "same-origin"
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            showToast(data.detail || "A response draft could not be created.");
+            return;
+        }
+
+        const conversationRes = await fetch(`/api/opportunities/${encodeURIComponent(opportunityId)}/conversation`, {
+            headers: { ...authHeaders },
+            credentials: "same-origin"
+        });
+        const conversationData = await conversationRes.json().catch(() => ({}));
+        const messages = conversationData.messages || [];
+        const latestInbound = [...messages].reverse().find(m => m.direction === "inbound");
+        const application = conversationData.application || {};
+
+        const composer = document.getElementById("emailComposerModal");
+        if (composer) composer.classList.remove("hidden");
+        document.getElementById("composerJobTitle").textContent = application.title || "Application";
+        document.getElementById("composerCompany").textContent = application.company || "";
+        document.getElementById("composerToEmail").value = latestInbound?.from_email || application.recipient_email || "";
+        document.getElementById("composerSubject").value = data.subject || `Re: ${latestInbound?.subject || application.subject || ""}`;
+        document.getElementById("composerBody").value = data.body || "";
+
+        const notice = document.getElementById("composerNotice");
+        if (notice) {
+            notice.textContent = data.notice || "Review this draft and edit it before you send. Nothing has been sent yet.";
+            notice.classList.remove("hidden");
+        }
+
+        currentEmailPayload = {
+            title: application.title || "Application",
+            company: application.company || "",
+            recipient_email: document.getElementById("composerToEmail").value,
+            recipient_name: latestInbound?.from_name || "",
+            opportunity_id: opportunityId
+        };
+
+        closeConversation();
+    } catch (e) {
+        showToast("Could not reach the server.");
+    }
+}
+
 
 /* ------------------------------------------------------------------
  * PERSONALIZED TECHNOLOGY NEWS
@@ -1030,6 +1658,9 @@ async function openEmailComposer(company, title, recipientEmail, recipientName =
     if (!modal) return;
     modal.classList.remove("hidden");
 
+    const notice = document.getElementById("composerNotice");
+    if (notice) notice.classList.add("hidden");
+
     document.getElementById("composerJobTitle").textContent = title;
     document.getElementById("composerCompany").textContent = company;
     document.getElementById("composerToEmail").value = recipientEmail;
@@ -1122,6 +1753,9 @@ async function submitOutreachEmail() {
         if (res.ok && data.status === "success") {
             sendBtn.textContent = "✓ Email Sent";
             showToast("Email sent successfully!");
+            // The application now exists in the Applications list with a
+            // tracked sent-email record that replies can be matched against.
+            loadApplications();
             setTimeout(() => {
                 closeEmailComposer();
                 sendBtn.disabled = false;
@@ -1136,6 +1770,50 @@ async function submitOutreachEmail() {
         sendBtn.disabled = false;
         sendBtn.textContent = "Try Again";
     }
+}
+
+function opportunityKeyFor(company, title) {
+    return `${company}_${title}`.toLowerCase().replace(/\s+/g, '_');
+}
+
+/**
+ * Compact application-communication state for an opportunity card.
+ * Reads the Applications data already loaded for the current user; renders
+ * nothing extra when the user has not sent email to that company.
+ */
+function renderCommunicationStrip(company, title) {
+    const key = opportunityKeyFor(company, title);
+    let application = applicationsState.byOpportunity[key];
+    if (!application) {
+        // Opportunity ids are normalized on both sides; match defensively.
+        application = applicationsState.applications.find(app =>
+            String(app.opportunity_id || "").toLowerCase().replace(/\s+/g, '_') === key
+        );
+    }
+    if (!application) return "";
+
+    const tone = applicationStatusTone(application.status);
+    const replied = application.reply_count > 0;
+    const unread = application.unread_count > 0;
+
+    if (replied) {
+        return `
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-3 border-t border-slate-800">
+            <div class="min-w-0">
+                <p class="text-[11px] font-bold text-${tone}-300">${unread ? "&#128172;" : "&#10003;"} ${escapeHtml(application.status)}${unread ? ` &middot; ${application.unread_count} new` : ""}</p>
+                <p class="text-[11px] text-slate-400 truncate">${escapeHtml(application.last_reply_preview || "Company replied")}</p>
+            </div>
+            <button onclick="openConversation('${escapeHtml(key).replace(/'/g, "\\'")}')"
+                class="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition shrink-0">View Conversation</button>
+        </div>`;
+    }
+
+    return `
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-3 border-t border-slate-800">
+        <p class="text-[11px] text-slate-400">&#10003; Application email sent &middot; no reply yet</p>
+        <button onclick="openConversation('${escapeHtml(key).replace(/'/g, "\\'")}')"
+            class="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition shrink-0">View Conversation</button>
+    </div>`;
 }
 
 function renderInterestedList() {
@@ -1160,6 +1838,7 @@ function renderInterestedList() {
                     <a href="${escapeHtml(job.url)}" target="_blank" rel="noopener noreferrer" class="px-3.5 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-bold hover:bg-slate-700 transition">Apply ↗</a>
                 </div>
             </div>
+            ${renderCommunicationStrip(job.company, job.title)}
         </div>
     `).join("");
 }

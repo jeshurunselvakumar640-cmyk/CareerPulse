@@ -33,6 +33,26 @@ class Settings:
             self.smtp_password = os.getenv("SMTP_PASSWORD", "")
             self.recipient_email = os.getenv("RECIPIENT_EMAIL", "")
 
+            # Gmail OAuth Configuration (mailbox READ access for company replies).
+            # Sending stays on SMTP above; this is only used to READ replies.
+            self.gmail_client_id = os.getenv("GOOGLE_CLIENT_ID", "")
+            self.gmail_client_secret = os.getenv("GOOGLE_CLIENT_SECRET", "")
+            # Empty means "derive from the incoming request", which keeps local
+            # development working without hard-coding a host.
+            self.gmail_redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "")
+            # Read-only scopes only: no send, no modify, no mailbox deletion.
+            self.gmail_scopes = [
+                "https://www.googleapis.com/auth/gmail.readonly",
+                "https://www.googleapis.com/auth/userinfo.email",
+            ]
+            # Fernet key used to encrypt OAuth refresh tokens at rest.
+            # When unset, a key is derived from the Supabase key (still
+            # encrypted at rest, but rotating the Supabase key would strand
+            # existing connections, so an explicit key is preferred).
+            self.mailbox_token_encryption_key = os.getenv("MAILBOX_TOKEN_ENCRYPTION_KEY", "")
+            # Seconds a user must wait between automatic mailbox syncs.
+            self.mailbox_sync_min_interval = int(os.getenv("MAILBOX_SYNC_MIN_INTERVAL", "300"))
+
             # AI & Search Settings
             self.primary_model = os.getenv("PRIMARY_MODEL", "gemini-3.5-flash-lite")
             self.fallback_model = os.getenv("FALLBACK_MODEL", "gemini-3.1-flash-lite")
@@ -54,6 +74,15 @@ class Settings:
             self.smtp_user = ""
             self.smtp_password = ""
             self.recipient_email = ""
+            self.gmail_client_id = ""
+            self.gmail_client_secret = ""
+            self.gmail_redirect_uri = ""
+            self.gmail_scopes = [
+                "https://www.googleapis.com/auth/gmail.readonly",
+                "https://www.googleapis.com/auth/userinfo.email",
+            ]
+            self.mailbox_token_encryption_key = ""
+            self.mailbox_sync_min_interval = 300
             self.primary_model = "gemini-3.5-flash-lite"
             self.fallback_model = "gemini-3.1-flash-lite"
             self.search_topic = "general"

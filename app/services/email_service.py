@@ -1,9 +1,22 @@
 import smtplib
-from typing import Dict, Any, Optional
+import uuid
+from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import format_datetime, make_msgid
+from typing import Dict, Any, Optional
 
 from app.config import settings
+
+
+def build_message_id() -> str:
+    """
+    Generate a unique RFC 5322 Message-ID for an outbound message.
+
+    A real Message-ID is what lets a later company reply reference this exact
+    email (In-Reply-To / References), so it must be unique per message.
+    """
+    return make_msgid(idstring=f"careerpulse-{uuid.uuid4().hex}", domain="careerpulse.local")
 
 
 def _build_message(
@@ -11,6 +24,7 @@ def _build_message(
     subject: str,
     body: str,
     html_body: Optional[str] = None,
+    message_id: Optional[str] = None,
 ) -> MIMEMultipart:
     """
     Builds a multipart/alternative message when an HTML part is supplied,
@@ -27,6 +41,12 @@ def _build_message(
     message["From"] = settings.smtp_user
     message["To"] = to_email
     message["Subject"] = subject
+
+    # Threading metadata. The Message-ID is unique per send; the Date header is
+    # explicit so the stored record matches what the recipient receives.
+    message["Message-ID"] = message_id or build_message_id()
+    message["Date"] = format_datetime(datetime.now(timezone.utc))
+    message["MIME-Version"] = "1.0"
     return message
 
 
@@ -35,11 +55,15 @@ def send_email(
     subject: str,
     body: str,
     html_body: Optional[str] = None,
-) -> None:
+    message_id: Optional[str] = None,
+) -> str:
     """
     Send an email using Gmail SMTP and MIME.
     When html_body is provided the message is multipart/alternative
     (text/plain + text/html). SMTP transport and credentials are unchanged.
+
+    Returns the Message-ID that was used, so the caller can store it and match
+    the company's reply later.
     """
 
     smtp_host = settings.smtp_host
@@ -62,7 +86,8 @@ def send_email(
             "Recipient email is required"
         )
 
-    message = _build_message(to_email, subject, body, html_body)
+    message = _build_message(to_email, subject, body, html_body, message_id)
+    resolved_message_id = message["Message-ID"]
 
     try:
         with smtplib.SMTP(
@@ -101,6 +126,8 @@ def send_email(
         raise RuntimeError(
             f"Unable to connect to SMTP server: {str(e)}"
         )
+
+    return resolved_message_id
 
 
 def verify_smtp_connection() -> Dict[str, Any]:

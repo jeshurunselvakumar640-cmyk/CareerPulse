@@ -70,6 +70,13 @@ REJECT_MARKERS = [
     "best-phone", "review", "opinion", "editorial", "gossip", "horoscope",
     "buying-guide", "top-10", "roundup", "unboxing", "best-", "top-",
     "sponsored", "advertorial", "giveaway", "listicle", "explained:", "what is",
+    # Evergreen / retrospective pieces are not news.
+    "the year of", "year in review", "a retrospective", "looking back at",
+    "anniversary of", "decade of",
+    # Calls to action and promotional campaigns.
+    "internship challenge", "apply now", "register now", "enroll now",
+    "sign up now", "join now", "limited seats", "last date to apply",
+    "admissions open", "call for applications", "call for papers",
 ]
 
 # Categories assigned deterministically from verified page content.
@@ -415,12 +422,13 @@ def extract_article_metadata(html_text: str, url: str) -> Dict[str, Any]:
                         result["published_at"] = item.get("datePublished") or item.get("dateCreated")
                     if not result["summary"] and isinstance(item.get("description"), str):
                         result["summary"] = item["description"].strip()
-                    author = item.get("author")
+                    # The publication is the source, never the byline author.
                     if not result["source_name"]:
-                        if isinstance(author, dict) and author.get("name"):
-                            result["source_name"] = author["name"].strip()
-                        elif isinstance(author, list) and author and isinstance(author[0], dict):
-                            result["source_name"] = (author[0].get("name") or "").strip()
+                        publisher = item.get("publisher")
+                        if isinstance(publisher, dict) and publisher.get("name"):
+                            result["source_name"] = str(publisher["name"]).strip()
+                        elif isinstance(publisher, list) and publisher and isinstance(publisher[0], dict):
+                            result["source_name"] = str(publisher[0].get("name") or "").strip() or None
             if result["is_news_article"]:
                 break
         except Exception:
@@ -470,6 +478,12 @@ def extract_article_metadata(html_text: str, url: str) -> Dict[str, Any]:
     if not result["source_name"]:
         netloc = urlparse(url).netloc.removeprefix("www.")
         result["source_name"] = netloc.split(".")[0].capitalize() if netloc else "Unknown"
+    else:
+        # A byline or author name is not a publication; only the site name is.
+        netloc = urlparse(url).netloc.removeprefix("www.")
+        site_word = netloc.split(".")[0].lower()
+        if len(result["source_name"].split()) > 4 or result["source_name"].lower() in ("unknown", site_word):
+            result["source_name"] = netloc.split(".")[0].capitalize() if netloc else "Unknown"
 
     if result["title"]:
         result["title"] = clean_page_html(result["title"])[:300]

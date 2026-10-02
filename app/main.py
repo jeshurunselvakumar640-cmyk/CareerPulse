@@ -1129,3 +1129,18 @@ async def serve_terms_of_service():
         response.headers["Cache-Control"] = "no-store"
         return response
     return JSONResponse(content={"status": "Terms of service not available"}, status_code=404)
+
+@app.get("/google530afea8cea95908.html")
+async def serve_google_site_verification():
+    """
+    Google Search Console HTML ownership-verification file.
+
+    Explicit single-path route on purpose: this deployment serves every request
+    through FastAPI (no static root is exposed), so the file has to be reachable
+    at the site root for Google to fetch it. Contents are not modified or cached.
+    """
+    response = _serve_frontend_file("google530afea8cea95908.html")
+    if response is not None:
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    return JSONResponse(content={"status": "Verification file not available"}, status_code=404)

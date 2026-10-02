@@ -45,6 +45,14 @@ class MailboxError(Exception):
     """Base error for mailbox operations."""
 
     code = "mailbox_error"
+    # The provider's own error identifier (invalid_client, redirect_uri_mismatch,
+    # invalid_grant, insufficient_scope, ...) kept separate from `code`, which is
+    # this application's stable contract used for UI messages and redirects.
+    provider_code = ""
+
+    def __init__(self, message: str, provider_code: str = ""):
+        super().__init__(message)
+        self.provider_code = provider_code or ""
 
 
 class MailboxNotConfigured(MailboxError):
@@ -245,27 +253,56 @@ def _post_token(payload: Dict[str, str]) -> Dict:
             timeout=REQUEST_TIMEOUT,
         )
     except requests.RequestException as e:
+        logger.error(
+            "Google token exchange failed: no HTTP response (%s).",
+            type(e).__name__,
+        )
         raise MailboxProviderError(f"Could not reach Google: {e}") from e
 
     if response.status_code == 200:
         try:
             return response.json()
         except ValueError as e:
-            raise MailboxProviderError("Google returned an unreadable token response.") from e
+            # The body of a 200 response carries a live access token and refresh
+            # token, so it is never logged. The status and shape are enough to
+            # diagnose an unparseable success.
+            logger.error(
+                "Google token exchange returned status=%s with an unreadable "
+                "body (content_type=%s, length=%d). The body is withheld because "
+                "a successful token response contains credentials.",
+                response.status_code,
+                (response.headers or {}).get("Content-Type", "unknown"),
+                len(response.text or ""),
+            )
+            raise MailboxProviderError(
+                "Google returned an unreadable token response.",
+                provider_code="unreadable_token_response",
+            ) from e
 
     try:
         err = response.json()
     except ValueError:
         err = {}
 
-    # Never surface raw provider text to the browser.
-    logger.warning("Google token endpoint returned %s (%s)", response.status_code, err.get("error"))
+    # A non-200 body from Google carries only error fields, never a token, so the
+    # raw text is safe to record and is what makes an OAuth failure diagnosable.
+    provider_error = err.get("error") if isinstance(err, dict) else None
+    description = err.get("error_description") if isinstance(err, dict) else None
+    raw_body = (response.text or "")[:600]
 
-    # `invalid_client` means Google rejected the client credentials themselves,
-    # not the code or the redirect. Log the sanitized reason and which parameters
-    # were sent so a newline-padded or mismatched value can be identified.
-    if err.get("error") == "invalid_client":
-        logger.warning(
+    logger.error(
+        "Google token exchange failed: status=%s provider_error=%s body=%s",
+        response.status_code,
+        provider_error or "(none)",
+        raw_body or "(empty)",
+    )
+
+    # Never surface raw provider text to the browser.
+    if provider_error == "invalid_client":
+        # `invalid_client` means Google rejected the client credentials
+        # themselves, not the code or the redirect. Log which parameters were sent
+        # so a newline-padded or mismatched value can be identified.
+        logger.error(
             "Google rejected the OAuth client (invalid_client). Sent: "
             "client_id_suffix=%s client_secret_len=%d redirect_uri=%r. "
             "The secret is not logged. A trailing newline in "
@@ -275,16 +312,21 @@ def _post_token(payload: Dict[str, str]) -> Dict:
             len(settings.gmail_client_secret or ""),
             payload.get("redirect_uri"),
         )
-        raise MailboxAuthError(
-            "Google rejected this OAuth client. An administrator must check "
-            "GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET."
-        )
+
+    detail = f" (Google: {provider_error})" if provider_error else ""
+    message = description or "Google rejected the authorization request."
 
     if response.status_code in (400, 401):
-        raise MailboxAuthError(err.get("error_description") or "Google rejected the authorization request.")
+        raise MailboxAuthError(f"{message}{detail}", provider_code=str(provider_error or ""))
     if response.status_code == 429:
-        raise MailboxRateLimited("Google is rate limiting authorization requests.")
-    raise MailboxProviderError("Google token exchange failed.")
+        raise MailboxRateLimited(
+            "Google is rate limiting authorization requests.",
+            provider_code=str(provider_error or ""),
+        )
+    raise MailboxProviderError(
+        f"Google token exchange failed.{detail}",
+        provider_code=str(provider_error or ""),
+    )
 
 
 def exchange_authorization_code(code: str, redirect_uri: str) -> TokenBundle:

@@ -928,12 +928,13 @@ async def email_integration_callback(request: Request, code: Optional[str] = Non
         return RedirectResponse(url="/app#applications&mailbox=migration_required")
     except MailboxError as e:
         code_name = getattr(e, "code", "mailbox_error")
+        provider_code = getattr(e, "provider_code", "") or "(none)"
         # The detail is logged for the operator only. The browser receives the
         # error code, never this text.
         logger.error(
             "Gmail OAuth callback failed before the connection was stored "
-            "(error_code=%s, exception=%s): %s",
-            code_name, type(e).__name__, e,
+            "(error_code=%s, google_error_code=%s, exception=%s): %s",
+            code_name, provider_code, type(e).__name__, e,
         )
         return RedirectResponse(url=f"/app#applications&mailbox={code_name}")
     except Exception as e:

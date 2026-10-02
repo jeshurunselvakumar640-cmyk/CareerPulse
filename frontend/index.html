@@ -19,6 +19,15 @@
         }
     </script>
     <link rel="stylesheet" href="/static/styles/dashboard.css">
+
+    <!-- Progressive Web App -->
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="theme-color" content="#090d16">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="CareerPulse">
+    <link rel="apple-touch-icon" href="/static/assets/apple-touch-icon.png">
     <style>
         @keyframes swipeRight {
             0% {
@@ -180,6 +189,14 @@
                                 d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                         </svg>
                         <span>Candidate Profile</span>
+                    </button>
+                    <button onclick="navigateTo('resume')" id="nav-resume"
+                        class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800 transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span>Resume Builder</span>
                     </button>
                 </nav>
             </div>
@@ -583,11 +600,630 @@
                     </div>
                 </section>
 
+                <!-- VIEW 7: RESUME BUILDER -->
+                <section id="view-resume" class="page-view hidden space-y-6">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div class="space-y-1">
+                            <h2 class="text-xl font-extrabold text-white tracking-tight">Resume Builder</h2>
+                            <p class="text-xs text-slate-400">Every section saves on its own. Personal Details and Headline
+                                / Designation are required; everything else is optional.</p>
+                        </div>
+                        <button type="button" id="resumeBuildBtn" onclick="buildResume()"
+                            class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/20 flex-shrink-0">
+                            Build Resume
+                        </button>
+                    </div>
+
+                    <div id="resumeLoadingState"
+                        class="p-8 rounded-2xl bg-slate-900 border border-slate-800 text-center space-y-3">
+                        <p class="text-xs text-slate-400">Loading your resume…</p>
+                    </div>
+
+                    <div id="resumeErrorState" class="hidden p-6 rounded-2xl bg-rose-500/10 border border-rose-500/30 space-y-3">
+                        <p id="resumeErrorText" class="text-xs text-rose-200">Could not load your resume.</p>
+                        <button type="button" onclick="loadResumeView(true)"
+                            class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold">Try
+                            again</button>
+                    </div>
+
+                    <div id="resumeContent" class="hidden space-y-4">
+
+                        <!-- 1. PERSONAL DETAILS (required) -->
+                        <div class="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
+                            <button type="button" onclick="toggleResumeSection('resumeSecPersonalBody')"
+                                class="w-full flex items-center justify-between gap-3 text-left">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <span class="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 font-bold text-xs">01</span>
+                                    <div class="min-w-0">
+                                        <h3 class="text-sm font-bold text-white">Personal Details</h3>
+                                        <p class="text-[10px] text-slate-500">Required · name and email</p>
+                                    </div>
+                                </div>
+                                <svg class="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round"
+                                        stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+
+                            <div id="resumeSecPersonalBody" class="space-y-4">
+                                <div class="flex flex-wrap items-center gap-4">
+                                    <img id="resumeProfilePic"
+                                        class="w-20 h-20 rounded-2xl bg-slate-800 object-cover border border-slate-700 shrink-0"
+                                        alt="Profile picture">
+                                    <div class="space-y-2 min-w-0">
+                                        <input type="file" id="resumeProfilePicInput" accept="image/jpeg,image/png"
+                                            class="text-[10px] text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-slate-800 file:text-slate-200 file:text-[10px] file:font-bold">
+                                        <div class="flex flex-wrap gap-2">
+                                            <button type="button" id="resumeProfilePicBtn"
+                                                onclick="uploadResumeImage('profile-picture')"
+                                                class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition">Upload
+                                                Picture</button>
+                                            <button type="button" id="resumeProfilePicChangeBtn"
+                                                onclick="resumeStartPhotoChange()"
+                                                class="hidden px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition">Change
+                                                Photo</button>
+                                            <button type="button" id="resumeProfilePicClearBtn"
+                                                onclick="clearResumeImage('profile-picture')"
+                                                aria-label="Remove resume photo"
+                                                class="hidden px-4 py-2 rounded-xl bg-slate-800 hover:bg-red-600 hover:text-white text-slate-300 text-xs font-semibold transition">Remove</button>
+                                        </div>
+                                        <p id="resumeProfilePicName"
+                                            class="hidden text-[10px] font-semibold text-emerald-400 break-all truncate"></p>
+                                        <p class="text-[10px] text-slate-500">JPG or PNG, up to 2MB.</p>
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div class="space-y-1.5">
+                                        <label class="text-xs font-semibold text-slate-300 block">Name *</label>
+                                        <input type="text" id="resumeName" placeholder="Your full name"
+                                            class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500">
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <label class="text-xs font-semibold text-slate-300 block">Email *</label>
+                                        <input type="email" id="resumeEmail" placeholder="you@example.com"
+                                            class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500">
+                                    </div>
+                                </div>
+
+                                <button type="button" id="resumeAdditionalToggle" onclick="toggleResumeAdditional()"
+                                    class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition flex items-center gap-2">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M12 4v16m8-8H4" /></svg>
+                                    <span id="resumeAdditionalToggleLabel">Add Additional Details</span>
+                                </button>
+
+                                <div id="resumeAdditionalFields" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div class="space-y-1.5">
+                                        <label class="text-xs font-semibold text-slate-300 block">Date of Birth</label>
+                                        <input type="text" inputmode="numeric" autocomplete="off" id="resumeDob"
+                                            placeholder="DD/MM/YYYY" maxlength="10"
+                                            class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500">
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <label class="text-xs font-semibold text-slate-300 block">Gender</label>
+                                        <input type="text" id="resumeGender" placeholder="e.g., Female / Male / Non-binary"
+                                            class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500">
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <label class="text-xs font-semibold text-slate-300 block">LinkedIn</label>
+                                        <input type="url" id="resumeLinkedin" placeholder="https://linkedin.com/in/you"
+                                            class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500">
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <label class="text-xs font-semibold text-slate-300 block">GitHub</label>
+                                        <input type="url" id="resumeGithub" placeholder="https://github.com/you"
+                                            class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500">
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <label class="text-xs font-semibold text-slate-300 block">Website</label>
+                                        <input type="url" id="resumeWebsite" placeholder="https://yourportfolio.dev"
+                                            class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500">
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <label class="text-xs font-semibold text-slate-300 block">Address</label>
+                                        <input type="text" id="resumeAddress" placeholder="Street address"
+                                            class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500">
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <label class="text-xs font-semibold text-slate-300 block">Pincode</label>
+                                        <input type="text" id="resumePincode" placeholder="400701"
+                                            class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500">
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <label class="text-xs font-semibold text-slate-300 block">City</label>
+                                        <input type="text" id="resumeCity" placeholder="Navi Mumbai"
+                                            class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500">
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <label class="text-xs font-semibold text-slate-300 block">State</label>
+                                        <input type="text" id="resumeState" placeholder="Maharashtra"
+                                            class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500">
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <label class="text-xs font-semibold text-slate-300 block">Country</label>
+                                        <input type="text" id="resumeCountry" placeholder="India"
+                                            class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500">
+                                    </div>
+                                </div>
+
+                                <button type="button" id="resumePersonalSaveBtn" onclick="saveResumePersonalDetails()"
+                                    class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/20">Save
+                                    Personal Details</button>
+                            </div>
+                        </div>
+
+                        <!-- 2. HEADLINE (required) -->
+                        <div class="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
+                            <button type="button" onclick="toggleResumeSection('resumeSecHeadlineBody')"
+                                class="w-full flex items-center justify-between gap-3 text-left">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <span class="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 font-bold text-xs">02</span>
+                                    <div class="min-w-0">
+                                        <h3 class="text-sm font-bold text-white">Headline / Designation</h3>
+                                        <p class="text-[10px] text-slate-500">Required</p>
+                                    </div>
+                                </div>
+                                <svg class="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round"
+                                        stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+
+                            <div id="resumeSecHeadlineBody" class="space-y-4">
+                                <div class="space-y-1.5">
+                                    <label class="text-xs font-semibold text-slate-300 block">Headline / Designation *</label>
+                                    <input type="text" id="resumeHeadline"
+                                        placeholder="Software Developer, Computer Engineering Student, AI/ML Developer…"
+                                        class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500">
+                                </div>
+                                <button type="button" id="resumeHeadlineSaveBtn" onclick="saveResumeHeadline()"
+                                    class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/20">Save
+                                    Headline</button>
+                            </div>
+                        </div>
+
+                        <!-- 3. EDUCATION -->
+                        <div class="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
+                            <button type="button" onclick="toggleResumeSection('resumeSecEducationBody')"
+                                class="w-full flex items-center justify-between gap-3 text-left">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <span class="p-2 rounded-lg bg-slate-800 text-slate-300 font-bold text-xs">03</span>
+                                    <div class="min-w-0">
+                                        <h3 class="text-sm font-bold text-white">Education</h3>
+                                        <p class="text-[10px] text-slate-500">Optional</p>
+                                    </div>
+                                </div>
+                                <svg class="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round"
+                                        stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+
+                            <div id="resumeSecEducationBody" class="space-y-4">
+                                <div id="resumeEducationForm" class="hidden p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-4">
+                                </div>
+                                <button type="button" id="resumeEducationAddBtn" onclick="openResumeEntryForm('education')"
+                                    class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/20 flex items-center gap-2">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M12 4v16m8-8H4" /></svg>
+                                    Add Education
+                                </button>
+                                <div id="resumeEducationList" class="space-y-3"></div>
+                            </div>
+                        </div>
+
+                        <!-- 4. EXPERIENCE -->
+                        <div class="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
+                            <button type="button" onclick="toggleResumeSection('resumeSecExperienceBody')"
+                                class="w-full flex items-center justify-between gap-3 text-left">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <span class="p-2 rounded-lg bg-slate-800 text-slate-300 font-bold text-xs">04</span>
+                                    <div class="min-w-0">
+                                        <h3 class="text-sm font-bold text-white">Experience</h3>
+                                        <p class="text-[10px] text-slate-500">Optional · total calculated for you</p>
+                                    </div>
+                                </div>
+                                <svg class="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round"
+                                        stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+
+                            <div id="resumeSecExperienceBody" class="space-y-4">
+                                <div class="p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/30">
+                                    <p class="text-[10px] font-bold text-indigo-300 uppercase tracking-wider">Total
+                                        Experience</p>
+                                    <p id="resumeTotalExperience" class="text-sm font-bold text-white mt-1">0 years 0
+                                        months</p>
+                                </div>
+                                <div id="resumeExperienceForm" class="hidden p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-4">
+                                </div>
+                                <button type="button" id="resumeExperienceAddBtn" onclick="openResumeEntryForm('experience')"
+                                    class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/20 flex items-center gap-2">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M12 4v16m8-8H4" /></svg>
+                                    Add Experience
+                                </button>
+                                <div id="resumeExperienceList" class="space-y-3"></div>
+                            </div>
+                        </div>
+
+                        <!-- 5. SKILLS -->
+                        <div class="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
+                            <button type="button" onclick="toggleResumeSection('resumeSecSkillsBody')"
+                                class="w-full flex items-center justify-between gap-3 text-left">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <span class="p-2 rounded-lg bg-slate-800 text-slate-300 font-bold text-xs">05</span>
+                                    <div class="min-w-0">
+                                        <h3 class="text-sm font-bold text-white">Skills</h3>
+                                        <p class="text-[10px] text-slate-500">Optional</p>
+                                    </div>
+                                </div>
+                                <svg class="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round"
+                                        stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+
+                            <div id="resumeSecSkillsBody" class="space-y-4">
+                                <div class="flex gap-2">
+                                    <input type="text" id="resumeSkillsInput" placeholder="e.g., Python"
+                                        onkeydown="if(event.key==='Enter'){event.preventDefault();addResumeItem('skills');}"
+                                        class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500">
+                                    <button type="button" onclick="addResumeItem('skills')"
+                                        class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/20">+</button>
+                                </div>
+                                <div id="resumeSkillsList" class="flex flex-wrap gap-2"></div>
+                                <button type="button" id="resumeSkillsSaveBtn" onclick="saveResumeItemList('skills')"
+                                    class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/20">Save
+                                    Skills</button>
+                            </div>
+                        </div>
+
+                        <!-- 6. SUMMARY -->
+                        <div class="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
+                            <button type="button" onclick="toggleResumeSection('resumeSecSummaryBody')"
+                                class="w-full flex items-center justify-between gap-3 text-left">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <span class="p-2 rounded-lg bg-slate-800 text-slate-300 font-bold text-xs">06</span>
+                                    <div class="min-w-0">
+                                        <h3 class="text-sm font-bold text-white">Summary</h3>
+                                        <p class="text-[10px] text-slate-500">Optional</p>
+                                    </div>
+                                </div>
+                                <svg class="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round"
+                                        stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+
+                            <div id="resumeSecSummaryBody" class="space-y-4">
+                                <div class="space-y-1.5">
+                                    <label class="text-xs font-semibold text-slate-300 block">Professional Summary</label>
+                                    <textarea id="resumeSummary" rows="5"
+                                        placeholder="A short professional summary…"
+                                        class="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 leading-relaxed"></textarea>
+                                </div>
+                                <button type="button" id="resumeSummarySaveBtn" onclick="saveResumeTextField('summary')"
+                                    class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/20">Save
+                                    Summary</button>
+                            </div>
+                        </div>
+
+                        <!-- 7. REFERENCES -->
+                        <div class="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
+                            <button type="button" onclick="toggleResumeSection('resumeSecReferencesBody')"
+                                class="w-full flex items-center justify-between gap-3 text-left">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <span class="p-2 rounded-lg bg-slate-800 text-slate-300 font-bold text-xs">07</span>
+                                    <div class="min-w-0">
+                                        <h3 class="text-sm font-bold text-white">References</h3>
+                                        <p class="text-[10px] text-slate-500">Optional</p>
+                                    </div>
+                                </div>
+                                <svg class="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round"
+                                        stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+
+                            <div id="resumeSecReferencesBody" class="space-y-4">
+                                <div id="resumeReferencesForm" class="hidden p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-4">
+                                </div>
+                                <button type="button" id="resumeReferencesAddBtn" onclick="openResumeEntryForm('references')"
+                                    class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/20 flex items-center gap-2">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M12 4v16m8-8H4" /></svg>
+                                    Add Reference
+                                </button>
+                                <div id="resumeReferencesList" class="space-y-3"></div>
+                            </div>
+                        </div>
+
+                        <!-- 8. PROJECTS -->
+                        <div class="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
+                            <button type="button" onclick="toggleResumeSection('resumeSecProjectsBody')"
+                                class="w-full flex items-center justify-between gap-3 text-left">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <span class="p-2 rounded-lg bg-slate-800 text-slate-300 font-bold text-xs">08</span>
+                                    <div class="min-w-0">
+                                        <h3 class="text-sm font-bold text-white">Projects</h3>
+                                        <p class="text-[10px] text-slate-500">Optional</p>
+                                    </div>
+                                </div>
+                                <svg class="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round"
+                                        stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+
+                            <div id="resumeSecProjectsBody" class="space-y-4">
+                                <div id="resumeProjectsForm" class="hidden p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-4">
+                                </div>
+                                <button type="button" id="resumeProjectsAddBtn" onclick="openResumeEntryForm('projects')"
+                                    class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/20 flex items-center gap-2">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M12 4v16m8-8H4" /></svg>
+                                    Add Project
+                                </button>
+                                <div id="resumeProjectsList" class="space-y-3"></div>
+                            </div>
+                        </div>
+
+                        <!-- 9. HOBBIES -->
+                        <div class="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
+                            <button type="button" onclick="toggleResumeSection('resumeSecHobbiesBody')"
+                                class="w-full flex items-center justify-between gap-3 text-left">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <span class="p-2 rounded-lg bg-slate-800 text-slate-300 font-bold text-xs">09</span>
+                                    <div class="min-w-0">
+                                        <h3 class="text-sm font-bold text-white">Hobbies</h3>
+                                        <p class="text-[10px] text-slate-500">Optional</p>
+                                    </div>
+                                </div>
+                                <svg class="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round"
+                                        stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+
+                            <div id="resumeSecHobbiesBody" class="space-y-4">
+                                <div class="flex gap-2">
+                                    <input type="text" id="resumeHobbiesInput" placeholder="e.g., Keyboard Playing"
+                                        onkeydown="if(event.key==='Enter'){event.preventDefault();addResumeItem('hobbies');}"
+                                        class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500">
+                                    <button type="button" onclick="addResumeItem('hobbies')"
+                                        class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/20">+</button>
+                                </div>
+                                <div id="resumeHobbiesList" class="flex flex-wrap gap-2"></div>
+                                <button type="button" id="resumeHobbiesSaveBtn" onclick="saveResumeItemList('hobbies')"
+                                    class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/20">Save
+                                    Hobbies</button>
+                            </div>
+                        </div>
+
+                        <!-- 10. AWARDS -->
+                        <div class="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
+                            <button type="button" onclick="toggleResumeSection('resumeSecAwardsBody')"
+                                class="w-full flex items-center justify-between gap-3 text-left">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <span class="p-2 rounded-lg bg-slate-800 text-slate-300 font-bold text-xs">10</span>
+                                    <div class="min-w-0">
+                                        <h3 class="text-sm font-bold text-white">Awards</h3>
+                                        <p class="text-[10px] text-slate-500">Optional</p>
+                                    </div>
+                                </div>
+                                <svg class="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round"
+                                        stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+
+                            <div id="resumeSecAwardsBody" class="space-y-4">
+                                <div class="flex gap-2">
+                                    <input type="text" id="resumeAwardsInput" placeholder="e.g., Dean's List 2024"
+                                        onkeydown="if(event.key==='Enter'){event.preventDefault();addResumeItem('awards');}"
+                                        class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500">
+                                    <button type="button" onclick="addResumeItem('awards')"
+                                        class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/20">+</button>
+                                </div>
+                                <div id="resumeAwardsList" class="flex flex-wrap gap-2"></div>
+                                <button type="button" id="resumeAwardsSaveBtn" onclick="saveResumeItemList('awards')"
+                                    class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/20">Save
+                                    Awards</button>
+                            </div>
+                        </div>
+
+                        <!-- 11. ACTIVITIES -->
+                        <div class="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
+                            <button type="button" onclick="toggleResumeSection('resumeSecActivitiesBody')"
+                                class="w-full flex items-center justify-between gap-3 text-left">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <span class="p-2 rounded-lg bg-slate-800 text-slate-300 font-bold text-xs">11</span>
+                                    <div class="min-w-0">
+                                        <h3 class="text-sm font-bold text-white">Activities</h3>
+                                        <p class="text-[10px] text-slate-500">Optional</p>
+                                    </div>
+                                </div>
+                                <svg class="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round"
+                                        stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+
+                            <div id="resumeSecActivitiesBody" class="space-y-4">
+                                <div class="flex gap-2">
+                                    <input type="text" id="resumeActivitiesInput" placeholder="e.g., Coding Club Treasurer"
+                                        onkeydown="if(event.key==='Enter'){event.preventDefault();addResumeItem('activities');}"
+                                        class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500">
+                                    <button type="button" onclick="addResumeItem('activities')"
+                                        class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/20">+</button>
+                                </div>
+                                <div id="resumeActivitiesList" class="flex flex-wrap gap-2"></div>
+                                <button type="button" id="resumeActivitiesSaveBtn" onclick="saveResumeItemList('activities')"
+                                    class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/20">Save
+                                    Activities</button>
+                            </div>
+                        </div>
+
+                        <!-- 12. PUBLICATIONS -->
+                        <div class="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
+                            <button type="button" onclick="toggleResumeSection('resumeSecPublicationsBody')"
+                                class="w-full flex items-center justify-between gap-3 text-left">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <span class="p-2 rounded-lg bg-slate-800 text-slate-300 font-bold text-xs">12</span>
+                                    <div class="min-w-0">
+                                        <h3 class="text-sm font-bold text-white">Publications</h3>
+                                        <p class="text-[10px] text-slate-500">Optional</p>
+                                    </div>
+                                </div>
+                                <svg class="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round"
+                                        stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+
+                            <div id="resumeSecPublicationsBody" class="space-y-4">
+                                <div id="resumePublicationsForm" class="hidden p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-4">
+                                </div>
+                                <button type="button" id="resumePublicationsAddBtn" onclick="openResumeEntryForm('publications')"
+                                    class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/20 flex items-center gap-2">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M12 4v16m8-8H4" /></svg>
+                                    Add Publication
+                                </button>
+                                <div id="resumePublicationsList" class="space-y-3"></div>
+                            </div>
+                        </div>
+
+                        <!-- 13. LANGUAGES -->
+                        <div class="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
+                            <button type="button" onclick="toggleResumeSection('resumeSecLanguagesBody')"
+                                class="w-full flex items-center justify-between gap-3 text-left">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <span class="p-2 rounded-lg bg-slate-800 text-slate-300 font-bold text-xs">13</span>
+                                    <div class="min-w-0">
+                                        <h3 class="text-sm font-bold text-white">Languages</h3>
+                                        <p class="text-[10px] text-slate-500">Optional</p>
+                                    </div>
+                                </div>
+                                <svg class="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round"
+                                        stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+
+                            <div id="resumeSecLanguagesBody" class="space-y-4">
+                                <div class="flex gap-2">
+                                    <input type="text" id="resumeLanguagesInput" placeholder="e.g., English"
+                                        onkeydown="if(event.key==='Enter'){event.preventDefault();addResumeItem('languages');}"
+                                        class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500">
+                                    <button type="button" onclick="addResumeItem('languages')"
+                                        class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/20">+</button>
+                                </div>
+                                <div id="resumeLanguagesList" class="flex flex-wrap gap-2"></div>
+                                <button type="button" id="resumeLanguagesSaveBtn" onclick="saveResumeItemList('languages')"
+                                    class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/20">Save
+                                    Languages</button>
+                            </div>
+                        </div>
+
+                        <!-- 14. ADDITIONAL INFORMATION -->
+                        <div class="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
+                            <button type="button" onclick="toggleResumeSection('resumeSecAdditionalInfoBody')"
+                                class="w-full flex items-center justify-between gap-3 text-left">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <span class="p-2 rounded-lg bg-slate-800 text-slate-300 font-bold text-xs">14</span>
+                                    <div class="min-w-0">
+                                        <h3 class="text-sm font-bold text-white">Additional Information</h3>
+                                        <p class="text-[10px] text-slate-500">Optional</p>
+                                    </div>
+                                </div>
+                                <svg class="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round"
+                                        stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+
+                            <div id="resumeSecAdditionalInfoBody" class="space-y-4">
+                                <div class="space-y-1.5">
+                                    <label class="text-xs font-semibold text-slate-300 block">Certifications,
+                                        achievements, availability, interests…</label>
+                                    <textarea id="resumeAdditionalInfo" rows="4"
+                                        class="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 leading-relaxed"></textarea>
+                                </div>
+                                <button type="button" id="resumeAdditionalInfoSaveBtn"
+                                    onclick="saveResumeTextField('additional_information')"
+                                    class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/20">Save
+                                    Additional Information</button>
+                            </div>
+                        </div>
+
+                        <!-- 15. SIGNATURE -->
+                        <div class="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
+                            <button type="button" onclick="toggleResumeSection('resumeSecSignatureBody')"
+                                class="w-full flex items-center justify-between gap-3 text-left">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <span class="p-2 rounded-lg bg-slate-800 text-slate-300 font-bold text-xs">15</span>
+                                    <div class="min-w-0">
+                                        <h3 class="text-sm font-bold text-white">Signature</h3>
+                                        <p class="text-[10px] text-slate-500">Optional</p>
+                                    </div>
+                                </div>
+                                <svg class="w-4 h-4 text-slate-500 shrink-0" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round"
+                                        stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+
+                            <div id="resumeSecSignatureBody" class="space-y-4">
+                                <div class="flex flex-wrap items-center gap-4">
+                                    <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 min-h-[72px] min-w-[180px] flex items-center justify-center">
+                                        <img id="resumeSignaturePreview" class="hidden max-h-16 object-contain"
+                                            alt="Signature preview">
+                                        <span id="resumeSignatureEmpty"
+                                            class="text-[10px] text-slate-500">No signature uploaded</span>
+                                    </div>
+                                    <div class="space-y-2">
+                                        <input type="file" id="resumeSignatureInput" accept="image/jpeg,image/png"
+                                            class="text-[10px] text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-slate-800 file:text-slate-200 file:text-[10px] file:font-bold">
+                                        <div class="flex flex-wrap gap-2">
+                                            <button type="button" id="resumeSignatureBtn"
+                                                onclick="uploadResumeImage('signature')"
+                                                class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition">Upload
+                                                Signature</button>
+                                            <button type="button" id="resumeSignatureClearBtn"
+                                                onclick="clearResumeImage('signature')"
+                                                class="hidden px-4 py-2 rounded-xl bg-slate-800 hover:bg-red-600 hover:text-white text-slate-300 text-xs font-semibold transition">Remove</button>
+                                        </div>
+                                        <p class="text-[10px] text-slate-500">JPG or PNG, up to 2MB.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </section>
+
             </main>
         </div>
     </div>
 
-    <!-- FETCH OPTIONS MODAL -->
+    <!-- RESUME PREVIEW MODAL -->
+<div id="resumePreviewModal"
+    class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-start sm:items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl my-4 shadow-2xl">
+        <div class="flex justify-between items-center gap-3 px-4 py-3 border-b border-slate-800 sticky top-0 bg-slate-900 rounded-t-2xl">
+            <div class="min-w-0">
+                <h3 class="text-base font-bold text-white">Resume Preview</h3>
+                <p class="text-[10px] text-slate-400">A4 &middot; print or save as PDF from your browser</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="button" onclick="printResumePreview()"
+                    class="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition">Print / Save PDF</button>
+                <button onclick="closeResumePreview()" aria-label="Close resume preview"
+                    class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
+            </div>
+        </div>
+        <div class="p-3 sm:p-6 bg-slate-950 rounded-b-2xl overflow-x-auto">
+            <div id="resumePreviewBody" class="resume-a4"></div>
+        </div>
+    </div>
+</div>
+
+<!-- FETCH OPTIONS MODAL -->
     <div id="fetchOptionsModal"
         class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">

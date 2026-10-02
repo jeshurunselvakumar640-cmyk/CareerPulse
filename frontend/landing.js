@@ -150,6 +150,16 @@ function showAuthNotice() {
         "LinkedIn sign-in could not be completed. Please try connecting again." +
         "</div>";
 
-    const nav = document.querySelector(".cp-nav");
-    if (nav && nav.nextSibling) nav.parentNode.insertBefore(banner, nav.nextSibling);
+        const nav = document.querySelector(".cp-nav");
+        if (nav && nav.nextSibling) nav.parentNode.insertBefore(banner, nav.nextSibling);
+    }
+
+/* ---------- Progressive Web App ---------- */
+/* Registered on window load so it never competes with page initialisation.
+   Failure is non-fatal: the landing page works normally without the worker. */
+if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js")
+            .catch(error => console.error("PWA service worker registration failed:", error));
+    });
 }

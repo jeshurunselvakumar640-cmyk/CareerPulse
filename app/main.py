@@ -37,6 +37,7 @@ from app.services import gmail_client
 from app.services.gmail_client import MailboxError, MailboxNotConfigured
 from app.services import reply_tracker
 from app.services.reply_tracker import MigrationRequired
+from app.services import resume_service
 
 logging.basicConfig(
     level=logging.INFO,
@@ -182,6 +183,71 @@ class ReplySyncRequest(BaseModel):
 
 class ReplyDraftRequest(BaseModel):
     opportunity_id: str
+
+class ResumePersonalDetailsRequest(BaseModel):
+    profile_picture_url: Optional[str] = ""
+    name: Optional[str] = ""
+    email: Optional[str] = ""
+    date_of_birth: Optional[str] = ""
+    gender: Optional[str] = ""
+    linkedin_url: Optional[str] = ""
+    github_url: Optional[str] = ""
+    website_url: Optional[str] = ""
+    address: Optional[str] = ""
+    pincode: Optional[str] = ""
+    city: Optional[str] = ""
+    state: Optional[str] = ""
+    country: Optional[str] = ""
+
+class ResumeHeadlineRequest(BaseModel):
+    headline: Optional[str] = ""
+
+class ResumeTextRequest(BaseModel):
+    value: Optional[str] = ""
+
+class ResumeValueListRequest(BaseModel):
+    values: Optional[List[str]] = []
+
+class ResumeEducationRequest(BaseModel):
+    id: Optional[str] = ""
+    course_degree: Optional[str] = ""
+    school_university: Optional[str] = ""
+    grade_score: Optional[str] = ""
+    currently_doing: Optional[bool] = False
+    start_date: Optional[str] = ""
+    end_date: Optional[str] = ""
+
+class ResumeExperienceRequest(BaseModel):
+    id: Optional[str] = ""
+    company_name: Optional[str] = ""
+    job_title: Optional[str] = ""
+    currently_work_here: Optional[bool] = False
+    employment_type: Optional[str] = ""
+    start_date: Optional[str] = ""
+    end_date: Optional[str] = ""
+    details: Optional[str] = ""
+
+class ResumeReferenceRequest(BaseModel):
+    id: Optional[str] = ""
+    referee_name: Optional[str] = ""
+    job_title: Optional[str] = ""
+    company_name: Optional[str] = ""
+    email: Optional[str] = ""
+    phone: Optional[str] = ""
+
+class ResumeLinkItemRequest(BaseModel):
+    """Shared shape for Projects and Publications (title / link / details)."""
+    id: Optional[str] = ""
+    title: Optional[str] = ""
+    link: Optional[str] = ""
+    details: Optional[str] = ""
+
+class ResumeAssetRequest(BaseModel):
+    kind: str
+    data_url: Optional[str] = ""
+
+class ResumeDeleteRequest(BaseModel):
+    id: str
 
 # -------------------------------------------------------------------
 # AUTH & TOKEN HELPERS
@@ -1100,6 +1166,434 @@ async def trigger_digest_send(req: Optional[DigestTriggerRequest] = None, auth_t
     return result
 
 # -------------------------------------------------------------------
+# RESUME BUILDER
+# -------------------------------------------------------------------
+# Ownership is derived from the validated Supabase session, never from the
+# request body: the browser has no way to name another user. Every query runs
+# through a client carrying the caller's JWT so the RLS policies in
+# supabase/migrations/20261003_resume_builder.sql are the enforcement boundary.
+
+#: Simple free-text resume fields saved through one endpoint.
+_RESUME_TEXT_FIELDS = {"summary", "additional_information"}
+
+
+def _resume_client(token: str) -> Client:
+    """Supabase client bound to the caller's session token."""
+    user_client = create_client(settings.supabase_url, settings.supabase_key)
+    user_client.auth.set_session(access_token=token, refresh_token="")
+    return user_client
+
+
+def _resume_defaults(user) -> Dict[str, Any]:
+    """One-time seed for a brand-new resume, taken from the existing profile.
+
+    Copies rather than links: the resume becomes independently editable from
+    this point, and later profile edits do not write through into it.
+    """
+    metadata = user.user_metadata or {}
+    return {
+        "name": metadata.get("full_name") or metadata.get("name") or "",
+        "email": user.email or "",
+        "profile_picture_url": metadata.get("avatar_url") or metadata.get("picture") or "",
+        "headline": metadata.get("headline") or "",
+        "linkedin_url": metadata.get("linkedin") or "",
+        "github_url": metadata.get("github") or "",
+    }
+
+
+def _require_resume(client, user) -> Dict[str, Any]:
+    profile = resume_service.get_or_create_resume(
+        client, user.id, defaults=_resume_defaults(user)
+    )
+    if not profile:
+        raise HTTPException(
+            status_code=503,
+            detail="Resume storage is unavailable. Apply the resume migration first.",
+        )
+    return profile
+
+
+@app.get("/api/resume")
+async def get_resume(auth_tuple=Depends(require_auth_token_and_user)):
+    token, user = auth_tuple
+    try:
+        client = _resume_client(token)
+        profile = _require_resume(client, user)
+        children = resume_service.load_child_records(client, profile["id"])
+
+        payload: Dict[str, Any] = dict(profile)
+        # The column has a database default, but normalise it here so the
+        # response shape is stable even for a row written before the column
+        # existed (or with an explicit NULL).
+        try:
+            payload["total_experience_months"] = int(profile.get("total_experience_months") or 0)
+        except (TypeError, ValueError):
+            payload["total_experience_months"] = 0
+        # The stored values are storage paths. Hand the browser short-lived
+        # signed URLs for rendering and keep the paths round-trippable.
+        payload["profile_picture_display"] = resume_service.sign_asset_url(
+            client, profile.get("profile_picture_url")
+        )
+        payload["signature_display"] = resume_service.sign_asset_url(
+            client, profile.get("signature_url")
+        )
+        payload["total_experience_display"] = resume_service.format_experience(
+            profile.get("total_experience_months")
+        )
+        payload["complete"] = resume_service.is_resume_complete(profile)
+
+        for section, rows in children.items():
+            if section in resume_service.VALUE_LIST_SECTIONS:
+                payload[section] = [row.get("value") for row in rows]
+            else:
+                payload[section] = rows
+
+        return {"status": "success", "resume": payload}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Resume load error: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed to load resume: {e}")
+
+
+@app.post("/api/resume/personal-details")
+async def save_resume_personal_details(req: ResumePersonalDetailsRequest, auth_tuple=Depends(require_auth_token_and_user)):
+    token, user = auth_tuple
+    try:
+        payload = {
+            "name": resume_service.require_text(req.name, "Name", 200),
+            "email": resume_service.validate_email(req.email, required=True),
+            "profile_picture_url": resume_service.optional_text(req.profile_picture_url, 500),
+            "date_of_birth": resume_service.optional_text(req.date_of_birth, 40) or None,
+            "gender": resume_service.optional_text(req.gender, 60),
+            "linkedin_url": resume_service.optional_text(req.linkedin_url, 500),
+            "github_url": resume_service.optional_text(req.github_url, 500),
+            "website_url": resume_service.optional_text(req.website_url, 500),
+            "address": resume_service.optional_text(req.address, 500),
+            "pincode": resume_service.optional_text(req.pincode, 20),
+            "city": resume_service.optional_text(req.city, 120),
+            "state": resume_service.optional_text(req.state, 120),
+            "country": resume_service.optional_text(req.country, 120),
+        }
+        client = _resume_client(token)
+        profile = _require_resume(client, user)
+        client.table(resume_service.RESUME_TABLE).update(payload).eq("id", profile["id"]).execute()
+        return {"status": "success", "message": "Personal details saved"}
+
+    except resume_service.ResumeValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Resume personal details save error: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed to save personal details: {e}")
+
+
+@app.post("/api/resume/headline")
+async def save_resume_headline(req: ResumeHeadlineRequest, auth_tuple=Depends(require_auth_token_and_user)):
+    token, user = auth_tuple
+    try:
+        headline = resume_service.require_text(req.headline, "Headline / Designation", 200)
+        client = _resume_client(token)
+        profile = _require_resume(client, user)
+        client.table(resume_service.RESUME_TABLE).update({"headline": headline}).eq("id", profile["id"]).execute()
+        return {"status": "success", "message": "Headline saved"}
+    except resume_service.ResumeValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Resume headline save error: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed to save headline: {e}")
+
+
+@app.post("/api/resume/text/{field}")
+async def save_resume_text_field(field: str, req: ResumeTextRequest, auth_tuple=Depends(require_auth_token_and_user)):
+    token, user = auth_tuple
+    if field not in _RESUME_TEXT_FIELDS:
+        raise HTTPException(status_code=400, detail="Unsupported resume text field.")
+    try:
+        client = _resume_client(token)
+        profile = _require_resume(client, user)
+        client.table(resume_service.RESUME_TABLE).update(
+            {field: resume_service.optional_text(req.value, 8000)}
+        ).eq("id", profile["id"]).execute()
+        return {"status": "success", "message": f"{field.replace('_', ' ').title()} saved"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Resume text save error (%s): %s", field, e)
+        raise HTTPException(status_code=500, detail=f"Failed to save: {e}")
+
+
+@app.post("/api/resume/items/{section}")
+async def save_resume_items(section: str, req: ResumeValueListRequest, auth_tuple=Depends(require_auth_token_and_user)):
+    """Replace a whole single-column list (skills, hobbies, awards, ...)."""
+    token, user = auth_tuple
+    if section not in resume_service.VALUE_LIST_SECTIONS:
+        raise HTTPException(status_code=400, detail="Unsupported resume item list.")
+    try:
+        values = resume_service.decode_json_list(req.values)
+        client = _resume_client(token)
+        profile = _require_resume(client, user)
+        resume_service.replace_value_list(client, profile["id"], section, values)
+        return {"status": "success", "message": f"{section.title()} saved", "values": values}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Resume list save error (%s): %s", section, e)
+        raise HTTPException(status_code=500, detail=f"Failed to save: {e}")
+
+
+@app.post("/api/resume/education")
+async def save_resume_education(req: ResumeEducationRequest, auth_tuple=Depends(require_auth_token_and_user)):
+    token, user = auth_tuple
+    try:
+        start_date, end_date = resume_service.validate_date_pair(
+            req.start_date, req.end_date, bool(req.currently_doing)
+        )
+        payload = {
+            "course_degree": resume_service.require_text(req.course_degree, "Course / Degree", 200),
+            "school_university": resume_service.require_text(req.school_university, "School / University", 200),
+            "grade_score": resume_service.optional_text(req.grade_score, 120),
+            "currently_doing": bool(req.currently_doing),
+            "start_date": start_date,
+            "end_date": end_date,
+        }
+
+        client = _resume_client(token)
+        profile = _require_resume(client, user)
+        table = resume_service.CHILD_TABLES["education"]
+
+        if req.id:
+            # Scoped to this resume as well as the id, so an id belonging to
+            # another account can never be touched.
+            client.table(table).update(payload).eq("id", req.id).eq("resume_id", profile["id"]).execute()
+        else:
+            existing = resume_service._rows(
+                client.table(table).select("id").eq("resume_id", profile["id"]).execute()
+            )
+            payload["resume_id"] = profile["id"]
+            payload["sort_order"] = len(existing)
+            client.table(table).insert(payload).execute()
+
+        return {"status": "success", "message": "Education saved"}
+
+    except resume_service.ResumeValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Resume education save error: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed to save education: {e}")
+
+
+@app.post("/api/resume/experience")
+async def save_resume_experience(req: ResumeExperienceRequest, auth_tuple=Depends(require_auth_token_and_user)):
+    token, user = auth_tuple
+    try:
+        start_date, end_date = resume_service.validate_date_pair(
+            req.start_date, req.end_date, bool(req.currently_work_here)
+        )
+        payload = {
+            "company_name": resume_service.require_text(req.company_name, "Company Name", 200),
+            "job_title": resume_service.require_text(req.job_title, "Job Title", 200),
+            "employment_type": resume_service.validate_employment_type(req.employment_type),
+            "currently_work_here": bool(req.currently_work_here),
+            "start_date": start_date,
+            "end_date": end_date,
+            "details": resume_service.optional_text(req.details, 4000),
+        }
+
+        client = _resume_client(token)
+        profile = _require_resume(client, user)
+        table = resume_service.CHILD_TABLES["experience"]
+
+        if req.id:
+            client.table(table).update(payload).eq("id", req.id).eq("resume_id", profile["id"]).execute()
+        else:
+            existing = resume_service._rows(
+                client.table(table).select("id").eq("resume_id", profile["id"]).execute()
+            )
+            payload["resume_id"] = profile["id"]
+            payload["sort_order"] = len(existing)
+            client.table(table).insert(payload).execute()
+
+        months = resume_service.recompute_total_experience(client, profile["id"])
+        return {
+            "status": "success",
+            "message": "Experience saved",
+            "total_experience_months": months,
+            "total_experience_display": resume_service.format_experience(months),
+        }
+
+    except resume_service.ResumeValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Resume experience save error: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed to save experience: {e}")
+
+
+@app.post("/api/resume/references")
+async def save_resume_reference(req: ResumeReferenceRequest, auth_tuple=Depends(require_auth_token_and_user)):
+    token, user = auth_tuple
+    try:
+        payload = {
+            "referee_name": resume_service.require_text(req.referee_name, "Referee's Name", 200),
+            "job_title": resume_service.optional_text(req.job_title, 200),
+            "company_name": resume_service.optional_text(req.company_name, 200),
+            "email": resume_service.validate_email(req.email, required=False),
+            "phone": resume_service.optional_text(req.phone, 40),
+        }
+        client = _resume_client(token)
+        profile = _require_resume(client, user)
+        table = resume_service.CHILD_TABLES["references"]
+
+        if req.id:
+            client.table(table).update(payload).eq("id", req.id).eq("resume_id", profile["id"]).execute()
+        else:
+            existing = resume_service._rows(
+                client.table(table).select("id").eq("resume_id", profile["id"]).execute()
+            )
+            payload["resume_id"] = profile["id"]
+            payload["sort_order"] = len(existing)
+            client.table(table).insert(payload).execute()
+
+        return {"status": "success", "message": "Reference saved"}
+    except resume_service.ResumeValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Resume reference save error: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed to save reference: {e}")
+
+
+@app.post("/api/resume/link-item/{section}")
+async def save_resume_link_item(section: str, req: ResumeLinkItemRequest, auth_tuple=Depends(require_auth_token_and_user)):
+    """Projects and Publications share the title / link / details shape."""
+    token, user = auth_tuple
+    if section not in ("projects", "publications"):
+        raise HTTPException(status_code=400, detail="Unsupported resume collection.")
+    try:
+        payload = {
+            "title": resume_service.require_text(req.title, "Title", 300),
+            "link": resume_service.optional_text(req.link, 500),
+            "details": resume_service.optional_text(req.details, 4000),
+        }
+        client = _resume_client(token)
+        profile = _require_resume(client, user)
+        table = resume_service.CHILD_TABLES[section]
+
+        if req.id:
+            client.table(table).update(payload).eq("id", req.id).eq("resume_id", profile["id"]).execute()
+        else:
+            existing = resume_service._rows(
+                client.table(table).select("id").eq("resume_id", profile["id"]).execute()
+            )
+            payload["resume_id"] = profile["id"]
+            payload["sort_order"] = len(existing)
+            client.table(table).insert(payload).execute()
+
+        return {"status": "success", "message": f"{section.title()[:-1]} saved"}
+    except resume_service.ResumeValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Resume %s save error: %s", section, e)
+        raise HTTPException(status_code=500, detail=f"Failed to save: {e}")
+
+
+@app.delete("/api/resume/child/{section}/{item_id}")
+async def delete_resume_child(section: str, item_id: str, auth_tuple=Depends(require_auth_token_and_user)):
+    """Delete one repeatable entry. Never touches the rest of the resume."""
+    token, user = auth_tuple
+    table = resume_service.CHILD_TABLES.get(section)
+    if not table:
+        raise HTTPException(status_code=400, detail="Unsupported resume collection.")
+    try:
+        client = _resume_client(token)
+        profile = _require_resume(client, user)
+        client.table(table).delete().eq("id", item_id).eq("resume_id", profile["id"]).execute()
+
+        if section == "experience":
+            months = resume_service.recompute_total_experience(client, profile["id"])
+            return {
+                "status": "success",
+                "message": "Experience removed",
+                "total_experience_months": months,
+                "total_experience_display": resume_service.format_experience(months),
+            }
+
+        return {"status": "success", "message": "Entry removed"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Resume child delete error (%s): %s", section, e)
+        raise HTTPException(status_code=500, detail=f"Failed to delete entry: {e}")
+
+
+@app.post("/api/resume/asset")
+async def upload_resume_asset(req: ResumeAssetRequest, auth_tuple=Depends(require_auth_token_and_user)):
+    """Upload a profile picture or signature into the private resume bucket.
+
+    The image is sent as a base64 data URL rather than multipart so this stays
+    a plain JSON endpoint and needs no new dependency. Only the storage path is
+    written to the database; the bytes never enter a text column.
+    """
+    token, user = auth_tuple
+    try:
+        client = _resume_client(token)
+        profile = _require_resume(client, user)
+        path = resume_service.upload_asset(client, user.id, req.kind, req.data_url or "")
+
+        column = "profile_picture_url" if req.kind == "profile-picture" else "signature_url"
+        client.table(resume_service.RESUME_TABLE).update({column: path}).eq("id", profile["id"]).execute()
+
+        return {
+            "status": "success",
+            "message": "Image uploaded",
+            "path": path,
+            "display_url": resume_service.sign_asset_url(client, path),
+        }
+    except resume_service.ResumeValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Resume asset upload error: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed to upload image: {e}")
+
+
+@app.post("/api/resume/asset/clear")
+async def clear_resume_asset(req: ResumeAssetRequest, auth_tuple=Depends(require_auth_token_and_user)):
+    """Detach a resume image from the document.
+
+    Only the reference is removed; the stored object is left alone because it
+    is addressed by the caller's own storage path and is overwritten by the
+    next upload.
+    """
+    token, user = auth_tuple
+    if req.kind not in ("profile-picture", "signature"):
+        raise HTTPException(status_code=400, detail="Unknown resume asset type.")
+    try:
+        client = _resume_client(token)
+        profile = _require_resume(client, user)
+        column = "profile_picture_url" if req.kind == "profile-picture" else "signature_url"
+        client.table(resume_service.RESUME_TABLE).update({column: None}).eq("id", profile["id"]).execute()
+        return {"status": "success", "message": "Image removed"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Resume asset clear error: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed to remove image: {e}")
+
+
+# -------------------------------------------------------------------
 # STATIC MOUNT
 # -------------------------------------------------------------------
 
@@ -1163,3 +1657,39 @@ async def serve_google_site_verification():
         response.headers["Cache-Control"] = "no-store"
         return response
     return JSONResponse(content={"status": "Verification file not available"}, status_code=404)
+
+@app.get("/manifest.webmanifest")
+async def serve_pwa_manifest():
+    """
+    PWA web app manifest.
+
+    Served from the site root so the <link rel="manifest"> tag resolves on
+    every page. The manifest MIME type is set explicitly because ".webmanifest"
+    is not a type Python's mimetypes module recognises, and browsers reject a
+    manifest that is not served as JSON.
+    """
+    response = _serve_frontend_file("manifest.webmanifest")
+    if response is not None:
+        response.headers["Content-Type"] = "application/manifest+json"
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+    return JSONResponse(content={"status": "Manifest not available"}, status_code=404)
+
+@app.get("/sw.js")
+async def serve_pwa_service_worker():
+    """
+    PWA service worker.
+
+    Served from the site root so its default scope covers the whole origin,
+    which is what lets it control "/" and "/app". A JavaScript content type is
+    mandatory: browsers refuse to register a worker served as anything else.
+    "no-cache" keeps the worker itself always revalidated so a new build is
+    picked up, while the versioned cache inside it still does the real caching.
+    """
+    response = _serve_frontend_file("sw.js")
+    if response is not None:
+        response.headers["Content-Type"] = "text/javascript; charset=utf-8"
+        response.headers["Cache-Control"] = "no-cache"
+        response.headers["Service-Worker-Allowed"] = "/"
+        return response
+    return JSONResponse(content={"status": "Service worker not available"}, status_code=404)

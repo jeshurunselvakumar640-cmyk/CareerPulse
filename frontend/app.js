@@ -31,7 +31,7 @@ const authState = {
 
 const USER_AVATAR_SVG = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 24 24' fill='none' stroke='%23818cf8' stroke-width='1.5'><path d='M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg>`;
 
-const APP_VIEW_HASHES = ["dashboard", "profile", "interested", "waitlist", "applications", "news"];
+const APP_VIEW_HASHES = ["dashboard", "profile", "interested", "waitlist", "applications", "news", "resume"];
 
 // Personalized tech news state.
 // Kept separate from currentTechNews so opening the tab never re-triggers an
@@ -88,6 +88,994 @@ function initBrandLogo() {
         }
         img.addEventListener("load", () => tile.classList.add("has-logo"));
     });
+}
+
+/* ==========================================================================
+   RESUME BUILDER
+   ==========================================================================
+   Mirrors the newsState pattern: one client-side document cache, loaded the
+   first time the view opens. Ownership is never handled here — the server
+   derives the user from the session cookie, so the browser has no way to name
+   another account. Every write targets a single section, so saving one part of
+   the resume can never clobber another.
+   ========================================================================== */
+
+/* Sections backed by a simple list of values (shared by 5 sections). */
+const RESUME_ITEM_SECTIONS = ["skills", "hobbies", "awards", "activities", "languages"];
+
+/* Sections backed by repeatable records with their own form. */
+const RESUME_ENTRY_SECTIONS = ["education", "experience", "references", "projects", "publications"];
+
+const resumeState = {
+    loaded: false,
+    loading: false,
+    inFlight: false,
+    error: null,
+    profile: {},
+    education: [],
+    experience: [],
+    references: [],
+    projects: [],
+    publications: [],
+    skills: [],
+    hobbies: [],
+    awards: [],
+    activities: [],
+    languages: [],
+    totalExperienceDisplay: "0 years 0 months",
+    /* Display name of the uploaded photo, shown beside the preview. */
+    profilePictureName: "",
+    /* CareerPulse profile picture, used only as a fallback preview. */
+    careerPulseAvatar: "",
+    /* section -> record id being edited ("" = creating a new one) */
+    editing: {},
+    /* pending, unsaved values for the simple item lists */
+    pendingItems: {}
+};
+
+const RESUME_EMPLOYMENT_TYPES = ["Internship", "Part Time Job", "Full Time Job"];
+
+/* Field definitions for the repeatable entry forms, so all five sections share
+   one renderer instead of five hand-written forms. */
+const RESUME_ENTRY_SCHEMAS = {
+    education: {
+        title: "Education",
+        ongoing: { name: "currently_doing", label: "Currently Doing" },
+        fields: [
+            { name: "course_degree", label: "Course / Degree *", type: "text", required: true },
+            { name: "school_university", label: "School / University *", type: "text", required: true },
+            { name: "grade_score", label: "Grade / Score", type: "text" },
+            { name: "start_date", label: "Start Date *", type: "date", required: true },
+            { name: "end_date", label: "End Date *", type: "date" }
+        ]
+    },
+    experience: {
+        title: "Experience",
+        ongoing: { name: "currently_work_here", label: "I currently work here" },
+        fields: [
+            { name: "company_name", label: "Company Name *", type: "text", required: true },
+            { name: "job_title", label: "Job Title *", type: "text", required: true },
+            {
+                name: "employment_type", label: "Employment Type *", type: "select", required: true,
+                options: RESUME_EMPLOYMENT_TYPES
+            },
+            { name: "start_date", label: "Start Date *", type: "date", required: true },
+            { name: "end_date", label: "End Date *", type: "date" },
+            { name: "details", label: "Details", type: "textarea" }
+        ]
+    },
+    references: {
+        title: "Reference",
+        fields: [
+            { name: "referee_name", label: "Referee's Name *", type: "text", required: true },
+            { name: "job_title", label: "Job Title", type: "text" },
+            { name: "company_name", label: "Company Name", type: "text" },
+            { name: "email", label: "Email", type: "email" },
+            { name: "phone", label: "Phone", type: "tel" }
+        ]
+    },
+    projects: {
+        title: "Project",
+        fields: [
+            { name: "title", label: "Title *", type: "text", required: true },
+            { name: "link", label: "Link", type: "url" },
+            { name: "details", label: "Details", type: "textarea" }
+        ]
+    },
+    publications: {
+        title: "Publication",
+        fields: [
+            { name: "title", label: "Title *", type: "text", required: true },
+            { name: "link", label: "Link", type: "url" },
+            { name: "details", label: "Details", type: "textarea" }
+        ]
+    }
+};
+
+/* ---------- small helpers ---------- */
+
+function resumeSafeId(value) {
+    return String(value == null ? "" : value).replace(/[^0-9a-zA-Z-]/g, "");
+}
+
+function resumeSetValue(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.value = value == null ? "" : value;
+}
+
+function resumeGetValue(id) {
+    const el = document.getElementById(id);
+    return el ? el.value.trim() : "";
+}
+
+/* ---------- DD/MM/YYYY <-> ISO (YYYY-MM-DD) ----------
+   The Resume Builder shows dates as DD/MM/YYYY while the API and the database
+   keep ISO YYYY-MM-DD. These helpers are pure string arithmetic: no Date
+   object is constructed, so there is no timezone shift and no off-by-one day. */
+
+function resumeIsoToDisplay(iso) {
+    const text = String(iso == null ? "" : iso).trim();
+    const match = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) return "";
+    return `${match[3]}/${match[2]}/${match[1]}`;
+}
+
+function resumeDisplayToIso(display) {
+    const text = String(display == null ? "" : display).trim();
+    if (!text) return "";
+    const match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!match) return null;
+
+    const day = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10);
+    const year = parseInt(match[3], 10);
+
+    if (month < 1 || month > 12) return null;
+    if (day < 1 || day > 31) return null;
+
+    // Days per month, with a leap-year check that avoids Date entirely.
+    const lengths = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+    const maxDay = month === 2 && leap ? 29 : lengths[month - 1];
+    if (day > maxDay) return null;
+
+    const pad = n => String(n).padStart(2, "0");
+    return `${year}-${pad(month)}-${pad(day)}`;
+}
+
+/* "2024-03" or "2024-03-15" -> "Mar 2024" */
+function resumeFormatMonth(value) {
+    if (!value) return "";
+    const parts = String(value).split("-");
+    if (parts.length < 2) return "";
+    const monthIndex = parseInt(parts[1], 10) - 1;
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const label = months[monthIndex] || "";
+    return label ? `${label} ${parts[0]}` : parts[0];
+}
+
+function resumeInputClass() {
+    return "w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500";
+}
+
+function resumeSectionTitle(section) {
+    return { education: "Education", experience: "Experience", references: "Reference", projects: "Project", publications: "Publication" }[section] || "Entry";
+}
+
+/* Button busy state, following the existing setSyncBusy convention. */
+function resumeSetBusy(btnId, busy, idleLabel) {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    btn.disabled = busy;
+    btn.style.opacity = busy ? "0.6" : "1";
+    if (busy) {
+        if (!btn.dataset.idleLabel) btn.dataset.idleLabel = idleLabel || btn.textContent.trim();
+        btn.textContent = "Saving…";
+    } else if (btn.dataset.idleLabel) {
+        btn.textContent = idleLabel || btn.dataset.idleLabel;
+    }
+}
+
+/* Shared fetch wrapper. Returns parsed JSON or throws with the server detail. */
+async function resumeRequest(url, options = {}) {
+    const authHeaders = await getAuthHeader();
+    const res = await fetch(url, {
+        ...options,
+        headers: { "Content-Type": "application/json", ...authHeaders, ...(options.headers || {}) },
+        credentials: "same-origin"
+    });
+
+    if (res.status === 401) {
+        handleExpiredToken();
+        throw new Error("Session expired");
+    }
+
+    let data = {};
+    try { data = await res.json(); } catch (e) { data = {}; }
+
+    if (!res.ok) {
+        throw new Error(data.detail || `Request failed (${res.status})`);
+    }
+    return data;
+}
+
+/* ---------- loading ---------- */
+
+async function loadResumeView(force = false) {
+    if (resumeState.inFlight) return;
+    if (resumeState.loaded && !force) return;
+    if (resumeState.loading) return;
+
+    resumeState.loading = true;
+    resumeState.error = null;
+
+    const loadingEl = document.getElementById("resumeLoadingState");
+    const errorEl = document.getElementById("resumeErrorState");
+    const errorText = document.getElementById("resumeErrorText");
+    const contentEl = document.getElementById("resumeContent");
+
+    if (contentEl) contentEl.classList.add("hidden");
+    if (loadingEl) loadingEl.classList.remove("hidden");
+    if (errorEl) errorEl.classList.add("hidden");
+
+    try {
+        const data = await resumeRequest("/api/resume");
+        const resume = data.resume || {};
+
+        resumeState.profile = resume;
+        RESUME_ENTRY_SECTIONS.forEach(section => {
+            resumeState[section] = Array.isArray(resume[section]) ? resume[section] : [];
+        });
+        RESUME_ITEM_SECTIONS.forEach(section => {
+            resumeState[section] = Array.isArray(resume[section]) ? resume[section] : [];
+            // Seed the unsaved working copy from what is stored.
+            resumeState.pendingItems[section] = resumeState[section].slice();
+        });
+        resumeState.totalExperienceDisplay = resume.total_experience_display || "0 years 0 months";
+        resumeState.loaded = true;
+
+        applyResumeToForm(resume);
+        renderResumeAll();
+
+        if (contentEl) contentEl.classList.remove("hidden");
+    } catch (err) {
+        resumeState.error = err.message || "Could not load your resume.";
+        if (errorText) errorText.textContent = resumeState.error;
+        if (errorEl) errorEl.classList.remove("hidden");
+        if (loadingEl) loadingEl.classList.add("hidden");
+        showToast(resumeState.error);
+    } finally {
+        resumeState.loading = false;
+        if (loadingEl) loadingEl.classList.add("hidden");
+    }
+}
+
+function applyResumeToForm(resume) {
+    resumeSetValue("resumeName", resume.name);
+    resumeSetValue("resumeEmail", resume.email);
+    resumeSetValue("resumeDob", resumeIsoToDisplay(resume.date_of_birth));
+    resumeSetValue("resumeGender", resume.gender);
+    resumeSetValue("resumeLinkedin", resume.linkedin_url);
+    resumeSetValue("resumeGithub", resume.github_url);
+    resumeSetValue("resumeWebsite", resume.website_url);
+    resumeSetValue("resumeAddress", resume.address);
+    resumeSetValue("resumePincode", resume.pincode);
+    resumeSetValue("resumeCity", resume.city);
+    resumeSetValue("resumeState", resume.state);
+    resumeSetValue("resumeCountry", resume.country);
+    resumeSetValue("resumeHeadline", resume.headline);
+    resumeSetValue("resumeSummary", resume.summary);
+    resumeSetValue("resumeAdditionalInfo", resume.additional_information);
+
+    // Reveal the "Add Additional Details" panel when any of its fields has a value.
+    const hasAdditional = ["resumeDob", "resumeGender", "resumeLinkedin", "resumeGithub",
+        "resumeWebsite", "resumeAddress", "resumePincode", "resumeCity", "resumeState",
+        "resumeCountry"].some(id => resumeGetValue(id));
+    if (hasAdditional) toggleResumeAdditional(true);
+
+    renderResumeImage("profile-picture", resume.profile_picture_display, resume.profile_picture_url);
+    renderResumeImage("signature", resume.signature_display, resume.signature_url);
+
+    const totalEl = document.getElementById("resumeTotalExperience");
+    if (totalEl) totalEl.textContent = resume.total_experience_display || "0 years 0 months";
+}
+
+/* Recover the display name of a saved photo from its storage path.
+   Only the final segment is used, and only when it actually looks like a
+   filename, so the user's UUID and the folder layout are never surfaced. */
+function resumePhotoNameFromPath(storedPath) {
+    const text = String(storedPath == null ? "" : storedPath).trim();
+    if (!text) return "";
+    const parts = text.split("/").filter(Boolean);
+    if (!parts.length) return "";
+    const file = parts[parts.length - 1];
+    if (file.length > 120) return "";
+    if (!/\.[A-Za-z0-9]{1,8}$/.test(file)) return "";
+    return file;
+}
+
+/* ---------- A4 resume preview ---------- */
+
+function rvDate(value) {
+    return resumeIsoToDisplay(value) || "";
+}
+
+function rvPeriod(start, end, ongoingLabel) {
+    const from = rvDate(start);
+    const to = end ? rvDate(end) : (ongoingLabel || "Present");
+    if (!from && !to) return "";
+    if (from && to) return `${from} - ${to}`;
+    return from || to;
+}
+
+function rvItem(title, meta, body) {
+    return `<div class="rv-item">
+        <div class="rv-row">
+            <span class="rv-strong">${escapeHtml(title)}</span>
+            ${meta ? `<span class="rv-meta">${escapeHtml(meta)}</span>` : ""}
+        </div>
+        ${body ? `<div class="rv-body">${escapeHtml(body)}</div>` : ""}
+    </div>`;
+}
+
+function rvSection(title, inner) {
+    if (!inner) return "";
+    return `<section class="rv-section">
+        <h2 class="rv-title">${escapeHtml(title)}</h2>
+        ${inner}
+    </section>`;
+}
+
+function rvChips(values) {
+    const list = (values || []).filter(v => String(v || "").trim());
+    if (!list.length) return "";
+    return `<div class="rv-chips">${list.map(v => `<span class="rv-chip">${escapeHtml(v)}</span>`).join("")}</div>`;
+}
+
+function renderResumePreview() {
+    const body = document.getElementById("resumePreviewBody");
+    if (!body) return;
+
+    const p = resumeState.profile || {};
+    const photo = p.profile_picture_display || resumeState.careerPulseAvatar || "";
+
+    const contact = [p.email, p.phone, p.city, p.state, p.country, p.linkedin_url,
+        p.github_url, p.website_url]
+        .map(v => String(v || "").trim()).filter(Boolean);
+
+    const education = (resumeState.education || []).map(e =>
+        rvItem(`${e.course_degree || ""}${e.school_university ? " - " + e.school_university : ""}`.replace(/^ - /, "").replace(/ - $/, ""),
+            rvPeriod(e.start_date, e.end_date, e.currently_doing ? "Present" : ""),
+            e.grade_score ? `Grade: ${e.grade_score}` : "")).join("");
+
+    const experience = (resumeState.experience || []).map(e =>
+        rvItem(`${e.job_title || ""}${e.company_name ? " at " + e.company_name : ""}`,
+            rvPeriod(e.start_date, e.end_date, e.currently_work_here ? "Present" : ""),
+            e.details || "")).join("");
+
+    const projects = (resumeState.projects || []).map(x =>
+        rvItem(x.title || "", "", [x.details, x.link].filter(Boolean).join("\n"))).join("");
+
+    const publications = (resumeState.publications || []).map(x =>
+        rvItem(x.title || "", "", [x.details, x.link].filter(Boolean).join("\n"))).join("");
+
+    const references = (resumeState.references || []).map(r =>
+        rvItem(r.referee_name || "", "",
+            [r.job_title, r.company_name, r.email, r.phone].filter(Boolean).join(" | "))).join("");
+
+    body.innerHTML = `
+        <header class="rv-head">
+            ${photo ? `<img class="rv-photo" src="${escapeHtml(photo)}" alt="">` : ""}
+            <div style="min-width:0">
+                <h1 class="rv-name">${escapeHtml(p.name || "")}</h1>
+                ${p.headline ? `<div class="rv-role">${escapeHtml(p.headline)}</div>` : ""}
+                ${p.summary ? `<div class="rv-body">${escapeHtml(p.summary)}</div>` : ""}
+                ${contact.length ? `<div class="rv-contact">${contact.map(c => `<span>${escapeHtml(c)}</span>`).join("")}</div>` : ""}
+            </div>
+        </header>
+        ${rvSection("Summary", p.summary ? `<div class="rv-body">${escapeHtml(p.summary)}</div>` : "")}
+        ${rvSection("Experience", experience)}
+        ${rvSection("Education", education)}
+        ${rvSection("Skills", rvChips(resumeState.skills))}
+        ${rvSection("Projects", projects)}
+        ${rvSection("Publications", publications)}
+        ${rvSection("Awards", rvChips(resumeState.awards))}
+        ${rvSection("Activities", rvChips(resumeState.activities))}
+        ${rvSection("Hobbies", rvChips(resumeState.hobbies))}
+        ${rvSection("Languages", rvChips(resumeState.languages))}
+        ${rvSection("References", references)}
+        ${rvSection("Additional Information", p.additional_information ? `<div class="rv-body">${escapeHtml(p.additional_information)}</div>` : "")}
+        ${p.signature_display ? `<div class="rv-sig"><img src="${escapeHtml(p.signature_display)}" alt="Signature"></div>` : ""}
+    `;
+}
+
+function closeResumePreview() {
+    const modal = document.getElementById("resumePreviewModal");
+    if (modal) modal.classList.add("hidden");
+}
+
+function printResumePreview() {
+    window.print();
+}
+
+/* Build Resume: persist anything pending, reload, then show the A4 preview. */
+async function buildResume() {
+    const btn = document.getElementById("resumeBuildBtn");
+    if (btn) resumeSetBusy("resumeBuildBtn", true, "Build Resume");
+    try {
+        // Flush any open editable row (education/experience/references/etc).
+        const editing = Object.keys(resumeState.editing || {})
+            .filter(k => resumeState.editing[k] !== undefined);
+        if (editing.length) saveResumeEntry(editing[0]);
+
+        // Persist any list sections the user edited but did not save.
+        const dirty = Object.keys(resumeState.pendingItems || {})
+            .filter(k => JSON.stringify(resumeState.pendingItems[k])
+                !== JSON.stringify(resumeState[k] || []));
+        for (const section of dirty) await saveResumeItemList(section);
+
+        await loadResume();
+        renderResumePreview();
+        const modal = document.getElementById("resumePreviewModal");
+        if (modal) modal.classList.remove("hidden");
+    } catch (err) {
+        showToast(err.message || "Could not build the resume preview.");
+    } finally {
+        if (btn) resumeSetBusy("resumeBuildBtn", false, "Build Resume");
+    }
+}
+
+function renderResumeImage(kind, displayUrl, storedPath) {
+    if (kind === "signature") {
+        const img = document.getElementById("resumeSignaturePreview");
+        const empty = document.getElementById("resumeSignatureEmpty");
+        const clearBtn = document.getElementById("resumeSignatureClearBtn");
+        if (displayUrl) {
+            img.src = displayUrl;
+            img.classList.remove("hidden");
+            if (empty) empty.classList.add("hidden");
+            if (clearBtn) clearBtn.classList.remove("hidden");
+        } else {
+            img.classList.add("hidden");
+            img.removeAttribute("src");
+            if (empty) empty.classList.remove("hidden");
+            if (clearBtn) clearBtn.classList.add("hidden");
+        }
+        return;
+    }
+
+    const img = document.getElementById("resumeProfilePic");
+    const clearBtn = document.getElementById("resumeProfilePicClearBtn");
+    const changeBtn = document.getElementById("resumeProfilePicChangeBtn");
+    const uploadBtn = document.getElementById("resumeProfilePicBtn");
+    const nameEl = document.getElementById("resumeProfilePicName");
+
+    if (displayUrl) {
+        img.src = displayUrl;
+        img.classList.remove("hidden");
+        // A photo exists: the normal Upload control is replaced by a
+        // persistent file name plus Change / Remove actions.
+        if (clearBtn) clearBtn.classList.remove("hidden");
+        if (changeBtn) changeBtn.classList.remove("hidden");
+        if (uploadBtn) uploadBtn.classList.add("hidden");
+        if (nameEl) {
+            const label = resumeState.profilePictureName
+                || resumePhotoNameFromPath(storedPath)
+                || "";
+            nameEl.textContent = label ? label : "Photo uploaded";
+            nameEl.title = label;
+            nameEl.classList.remove("hidden");
+        }
+    } else {
+        // No resume photo: fall back to the CareerPulse profile picture if one
+        // exists, otherwise hide the preview and restore the Upload control.
+        const fallback = resumeState.careerPulseAvatar || "";
+        if (fallback) {
+            img.src = fallback;
+            img.classList.remove("hidden");
+        } else {
+            img.removeAttribute("src");
+            img.classList.add("hidden");
+        }
+        if (clearBtn) clearBtn.classList.add("hidden");
+        if (changeBtn) changeBtn.classList.add("hidden");
+        if (uploadBtn) uploadBtn.classList.remove("hidden");
+        if (nameEl) {
+            nameEl.textContent = "";
+            nameEl.classList.add("hidden");
+        }
+    }
+}
+
+/* "Change Photo" re-opens the native file picker without a second upload path. */
+function resumeStartPhotoChange() {
+    const input = document.getElementById("resumeProfilePicInput");
+    if (input) input.click();
+}
+
+/* ---------- rendering ---------- */
+
+function renderResumeAll() {
+    RESUME_ENTRY_SECTIONS.forEach(renderResumeEntries);
+    RESUME_ITEM_SECTIONS.forEach(renderResumeItemList);
+    const totalEl = document.getElementById("resumeTotalExperience");
+    if (totalEl) totalEl.textContent = resumeState.totalExperienceDisplay;
+}
+
+function toggleResumeSection(bodyId) {
+    const el = document.getElementById(bodyId);
+    if (el) el.classList.toggle("hidden");
+}
+
+function toggleResumeAdditional(forceOpen) {
+    const fields = document.getElementById("resumeAdditionalFields");
+    const label = document.getElementById("resumeAdditionalToggleLabel");
+    if (!fields) return;
+    const open = forceOpen === true ? true : (forceOpen === false ? false : fields.classList.contains("hidden"));
+    fields.classList.toggle("hidden", !open);
+    if (label) label.textContent = open ? "Hide Additional Details" : "Add Additional Details";
+}
+
+/* ---------- simple item lists (skills, hobbies, awards, activities, languages) ---------- */
+
+function addResumeItem(section) {
+    const inputId = `resume${section.charAt(0).toUpperCase() + section.slice(1)}Input`;
+    const value = resumeGetValue(inputId);
+    if (!value) {
+        showToast("Enter a value first.");
+        return;
+    }
+    const list = resumeState.pendingItems[section] || (resumeState.pendingItems[section] = []);
+    if (list.some(item => String(item).toLowerCase() === value.toLowerCase())) {
+        showToast(`"${value}" is already in the list.`);
+        return;
+    }
+    list.push(value);
+    resumeSetValue(inputId, "");
+    renderResumeItemList(section);
+}
+
+function removeResumeItem(section, index) {
+    const list = resumeState.pendingItems[section];
+    if (!Array.isArray(list)) return;
+    list.splice(index, 1);
+    renderResumeItemList(section);
+}
+
+function renderResumeItemList(section) {
+    const container = document.getElementById(`resume${section.charAt(0).toUpperCase() + section.slice(1)}List`);
+    if (!container) return;
+    const list = resumeState.pendingItems[section] || [];
+
+    if (!list.length) {
+        container.innerHTML = `<p class="text-[10px] text-slate-500 italic w-full">Nothing added yet.</p>`;
+        return;
+    }
+
+    container.innerHTML = list.map((item, index) => `
+        <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-[11px] text-slate-200">
+            <span>${escapeHtml(item)}</span>
+            <button type="button" onclick="removeResumeItem('${section}', ${index})" title="Remove"
+                class="text-slate-400 hover:text-rose-300 transition font-bold">&times;</button>
+        </span>
+    `).join("");
+}
+
+async function saveResumeItemList(section) {
+    const btnId = `resume${section.charAt(0).toUpperCase() + section.slice(1)}SaveBtn`;
+    const values = resumeState.pendingItems[section] || [];
+    resumeSetBusy(btnId, true);
+    try {
+        const data = await resumeRequest(`/api/resume/items/${section}`, {
+            method: "POST",
+            body: JSON.stringify({ values })
+        });
+        resumeState[section] = data.values || values;
+        resumeState.pendingItems[section] = resumeState[section].slice();
+        renderResumeItemList(section);
+        showToast(data.message || `${resumeSectionTitle(section)} saved`);
+    } catch (err) {
+        showToast(err.message || "Could not save.");
+    } finally {
+        resumeSetBusy(btnId, false);
+    }
+}
+
+/* ---------- repeatable entry sections ---------- */
+
+function openResumeEntryForm(section, id) {
+    const schema = RESUME_ENTRY_SCHEMAS[section];
+    const form = document.getElementById(`resume${section.charAt(0).toUpperCase() + section.slice(1)}Form`);
+    if (!schema || !form) return;
+
+    resumeState.editing[section] = id ? resumeSafeId(id) : "";
+    const record = id ? (resumeState[section] || []).find(row => row.id === id) : null;
+
+    form.innerHTML = `
+        <h4 class="text-sm font-bold text-white">${record ? `Edit ${escapeHtml(schema.title)}` : `Add ${escapeHtml(schema.title)}`}</h4>
+        ${schema.fields.map(field => resumeRenderField(section, field, record)).join("")}
+        ${schema.ongoing ? `
+        <label class="flex items-center gap-2 text-xs font-semibold text-slate-300">
+            <input type="checkbox" id="resumeOngoing_${section}" data-resume-ongoing
+                onchange="toggleResumeOngoing('${section}', this.checked)"
+                class="w-4 h-4 rounded border-slate-700 bg-slate-950 accent-indigo-600"
+                ${record && record[schema.ongoing.name] ? "checked" : ""}>
+            ${escapeHtml(schema.ongoing.label)}
+        </label>` : ""}
+        <div class="flex flex-wrap gap-2">
+            <button type="button" id="resumeEntrySave_${section}"
+                onclick="saveResumeEntry('${section}')"
+                class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-indigo-600/20">Save</button>
+            <button type="button" onclick="closeResumeEntryForm('${section}')"
+                class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition">Cancel</button>
+        </div>
+    `;
+
+    form.classList.remove("hidden");
+    if (schema.ongoing) {
+        const box = document.getElementById(`resumeOngoing_${section}`);
+        if (box) toggleResumeOngoing(section, box.checked);
+    }
+    form.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function resumeRenderField(section, field, record) {
+    const value = record ? (record[field.name] || "") : "";
+    const required = field.required ? "required" : "";
+    const id = `resumeField_${section}_${field.name}`;
+
+    let control;
+    if (field.type === "textarea") {
+        control = `<textarea id="${id}" data-resume-field="${field.name}" rows="3" ${required}
+            class="${resumeInputClass()} leading-relaxed">${escapeHtml(value)}</textarea>`;
+    } else if (field.type === "select") {
+        control = `<select id="${id}" data-resume-field="${field.name}" ${required} class="${resumeInputClass()}">
+            <option value="">Select employment type</option>
+            ${field.options.map(option => `<option value="${escapeHtml(option)}" ${value === option ? "selected" : ""}>${escapeHtml(option)}</option>`).join("")}
+        </select>`;
+    } else if (field.type === "date") {
+        // A text input with a DD/MM/YYYY mask, so the browser's locale-dependent
+        // MM/DD/YYYY picker never appears. Stored values stay ISO.
+        control = `<input type="text" inputmode="numeric" autocomplete="off" id="${id}"
+            data-resume-field="${field.name}" data-resume-date="1" placeholder="DD/MM/YYYY"
+            maxlength="10" value="${escapeHtml(resumeIsoToDisplay(value))}"
+            class="${resumeInputClass()}">`;
+    } else {
+        control = `<input type="${field.type}" id="${id}" data-resume-field="${field.name}" ${required}
+            value="${escapeHtml(value)}" class="${resumeInputClass()}">`;
+    }
+
+    return `
+        <div data-resume-wrap="${field.name}" class="space-y-1.5">
+            <label class="text-xs font-semibold text-slate-300 block">${escapeHtml(field.label)}</label>
+            ${control}
+        </div>`;
+}
+
+function toggleResumeOngoing(section, checked) {
+    const form = document.getElementById(`resume${section.charAt(0).toUpperCase() + section.slice(1)}Form`);
+    if (!form) return;
+    const endWrap = form.querySelector('[data-resume-wrap="end_date"]');
+    if (endWrap) endWrap.classList.toggle("hidden", !!checked);
+}
+
+function closeResumeEntryForm(section) {
+    const form = document.getElementById(`resume${section.charAt(0).toUpperCase() + section.slice(1)}Form`);
+    if (form) {
+        form.classList.add("hidden");
+        form.innerHTML = "";
+    }
+    resumeState.editing[section] = "";
+}
+
+async function saveResumeEntry(section) {
+    const schema = RESUME_ENTRY_SCHEMAS[section];
+    if (!schema) return;
+
+    const form = document.getElementById(`resume${section.charAt(0).toUpperCase() + section.slice(1)}Form`);
+    const payload = { id: resumeState.editing[section] || "" };
+
+    let invalidDate = false;
+    schema.fields.forEach(field => {
+        const el = form ? form.querySelector(`[data-resume-field="${field.name}"]`) : null;
+        let value = el ? el.value.trim() : "";
+        if (field.type === "checkbox") value = !!el.checked;
+        if (field.type === "date") {
+            // DD/MM/YYYY in the UI, ISO on the wire.
+            const iso = resumeDisplayToIso(value);
+            if (iso === null) {
+                showToast(`${field.label.replace(/\s*\*$/, "")} must be a real date in DD/MM/YYYY format.`);
+                invalidDate = true;
+                return;
+            }
+            value = iso;
+        }
+        payload[field.name] = value;
+    });
+    if (invalidDate) return;
+
+    if (schema.ongoing) {
+        const box = document.getElementById(`resumeOngoing_${section}`);
+        payload[schema.ongoing.name] = box ? !!box.checked : false;
+        // An ongoing entry has no end date; the server drops it regardless.
+        if (payload[schema.ongoing.name]) payload.end_date = "";
+    }
+
+    resumeSetBusy(`resumeEntrySave_${section}`, true);
+    try {
+        const endpoint = (section === "education" || section === "experience" || section === "references")
+            ? `/api/resume/${section}`
+            : `/api/resume/link-item/${section}`;
+        const data = await resumeRequest(endpoint, { method: "POST", body: JSON.stringify(payload) });
+
+        closeResumeEntryForm(section);
+        await loadResumeView(true);
+
+        if (section === "experience" && data.total_experience_display) {
+            resumeState.totalExperienceDisplay = data.total_experience_display;
+            const totalEl = document.getElementById("resumeTotalExperience");
+            if (totalEl) totalEl.textContent = data.total_experience_display;
+        }
+        showToast(data.message || "Saved");
+    } catch (err) {
+        showToast(err.message || "Could not save.");
+    } finally {
+        resumeSetBusy(`resumeEntrySave_${section}`, false);
+    }
+}
+
+async function deleteResumeEntry(section, id) {
+    if (!confirm("Delete this entry? This cannot be undone.")) return;
+    try {
+        const data = await resumeRequest(`/api/resume/child/${section}/${resumeSafeId(id)}`, { method: "DELETE" });
+        await loadResumeView(true);
+        if (section === "experience" && data.total_experience_display) {
+            resumeState.totalExperienceDisplay = data.total_experience_display;
+            const totalEl = document.getElementById("resumeTotalExperience");
+            if (totalEl) totalEl.textContent = data.total_experience_display;
+        }
+        showToast(data.message || "Entry deleted");
+    } catch (err) {
+        showToast(err.message || "Could not delete.");
+    }
+}
+
+function renderResumeEntries(section) {
+    const container = document.getElementById(`resume${section.charAt(0).toUpperCase() + section.slice(1)}List`);
+    if (!container) return;
+    const rows = resumeState[section] || [];
+
+    if (!rows.length) {
+        container.innerHTML = `<p class="text-xs text-slate-500 italic">No ${escapeHtml(section)} added yet.</p>`;
+        return;
+    }
+
+    container.innerHTML = rows.map((row, index) => {
+        const safeId = resumeSafeId(row.id);
+        let heading = "";
+        let sub = "";
+
+        if (section === "education") {
+            heading = row.course_degree || "Course";
+            sub = [row.school_university, row.grade_score].filter(Boolean).join(" · ");
+        } else if (section === "experience") {
+            heading = row.job_title || "Role";
+            sub = [row.company_name, row.employment_type].filter(Boolean).join(" · ");
+        } else if (section === "references") {
+            heading = row.referee_name || "Referee";
+            sub = [row.job_title, row.company_name, row.email, row.phone].filter(Boolean).join(" · ");
+        } else {
+            heading = row.title || "Title";
+            sub = row.link || "";
+        }
+
+        const ongoingFlag = section === "education" ? "currently_doing" : "currently_work_here";
+        const from = resumeFormatMonth(row.start_date);
+        const to = row[ongoingFlag] ? "Present" : resumeFormatMonth(row.end_date);
+        const period = [from, to].filter(Boolean).join(" — ");
+        const details = (row.details || "").trim();
+
+        return `
+        <div class="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+            <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">${escapeHtml(resumeSectionTitle(section))} ${index + 1}</p>
+                    <h5 class="text-sm font-bold text-white">${escapeHtml(heading)}</h5>
+                    ${sub ? `<p class="text-xs text-indigo-400">${escapeHtml(sub)}</p>` : ""}
+                    ${period ? `<p class="text-[11px] text-slate-400">${escapeHtml(period)}</p>` : ""}
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <button type="button" onclick="openResumeEntryForm('${section}', '${safeId}')"
+                        class="px-3.5 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-bold hover:bg-slate-700 transition">Edit</button>
+                    <button type="button" onclick="deleteResumeEntry('${section}', '${safeId}')"
+                        class="px-3.5 py-1.5 rounded-lg bg-rose-600/20 text-rose-300 border border-rose-500/30 text-xs font-bold hover:bg-rose-600 hover:text-white transition">Delete</button>
+                </div>
+            </div>
+            ${details ? `<p class="text-[11px] text-slate-400 leading-relaxed">${escapeHtml(details)}</p>` : ""}
+        </div>`;
+    }).join("");
+}
+
+/* ---------- fixed sections ---------- */
+
+async function saveResumePersonalDetails() {
+    // The DOB field shows DD/MM/YYYY; the API stores ISO YYYY-MM-DD.
+    const dobIso = resumeDisplayToIso(resumeGetValue("resumeDob"));
+    if (dobIso === null) {
+        showToast("Date of Birth must be a real date in DD/MM/YYYY format.");
+        return;
+    }
+
+    const payload = {
+        profile_picture_url: resumeState.profile.profile_picture_url || "",
+        name: resumeGetValue("resumeName"),
+        email: resumeGetValue("resumeEmail"),
+        date_of_birth: dobIso,
+        gender: resumeGetValue("resumeGender"),
+        linkedin_url: resumeGetValue("resumeLinkedin"),
+        github_url: resumeGetValue("resumeGithub"),
+        website_url: resumeGetValue("resumeWebsite"),
+        address: resumeGetValue("resumeAddress"),
+        pincode: resumeGetValue("resumePincode"),
+        city: resumeGetValue("resumeCity"),
+        state: resumeGetValue("resumeState"),
+        country: resumeGetValue("resumeCountry")
+    };
+
+    resumeSetBusy("resumePersonalSaveBtn", true, "Save Personal Details");
+    try {
+        const data = await resumeRequest("/api/resume/personal-details", {
+            method: "POST",
+            body: JSON.stringify(payload)
+        });
+        // Keep the stored path so a later save does not wipe the uploaded image.
+        resumeState.profile = { ...resumeState.profile, ...payload };
+        showToast(data.message || "Personal details saved");
+    } catch (err) {
+        showToast(err.message || "Could not save personal details.");
+    } finally {
+        resumeSetBusy("resumePersonalSaveBtn", false, "Save Personal Details");
+    }
+}
+
+async function saveResumeHeadline() {
+    resumeSetBusy("resumeHeadlineSaveBtn", true, "Save Headline");
+    try {
+        const data = await resumeRequest("/api/resume/headline", {
+            method: "POST",
+            body: JSON.stringify({ headline: resumeGetValue("resumeHeadline") })
+        });
+        resumeState.profile.headline = resumeGetValue("resumeHeadline");
+        showToast(data.message || "Headline saved");
+    } catch (err) {
+        showToast(err.message || "Could not save headline.");
+    } finally {
+        resumeSetBusy("resumeHeadlineSaveBtn", false, "Save Headline");
+    }
+}
+
+async function saveResumeTextField(field) {
+    const map = {
+        summary: { input: "resumeSummary", btn: "resumeSummarySaveBtn", label: "Save Summary" },
+        additional_information: { input: "resumeAdditionalInfo", btn: "resumeAdditionalInfoSaveBtn", label: "Save Additional Information" }
+    };
+    const conf = map[field];
+    if (!conf) return;
+
+    resumeSetBusy(conf.btn, true, conf.label);
+    try {
+        const data = await resumeRequest(`/api/resume/text/${field}`, {
+            method: "POST",
+            body: JSON.stringify({ value: resumeGetValue(conf.input) })
+        });
+        resumeState.profile[field] = resumeGetValue(conf.input);
+        showToast(data.message || "Saved");
+    } catch (err) {
+        showToast(err.message || "Could not save.");
+    } finally {
+        resumeSetBusy(conf.btn, false, conf.label);
+    }
+}
+
+/* ---------- image upload ---------- */
+
+async function uploadResumeImage(kind) {
+    const inputId = kind === "signature" ? "resumeSignatureInput" : "resumeProfilePicInput";
+    const btnId = kind === "signature" ? "resumeSignatureBtn" : "resumeProfilePicBtn";
+    const input = document.getElementById(inputId);
+    if (!input || !input.files || !input.files[0]) {
+        showToast("Choose an image first.");
+        return;
+    }
+
+    const file = input.files[0];
+    if (file.size > 2 * 1024 * 1024) {
+        showToast("Image must be 2MB or smaller.");
+        input.value = "";
+        return;
+    }
+    if (!/^image\/(jpeg|png)$/i.test(file.type)) {
+        showToast("Only JPG and PNG images are accepted.");
+        input.value = "";
+        return;
+    }
+
+    resumeSetBusy(btnId, true, kind === "signature" ? "Upload Signature" : "Upload Picture");
+    try {
+        const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(new Error("Could not read the image."));
+            reader.readAsDataURL(file);
+        });
+
+        const data = await resumeRequest("/api/resume/asset", {
+            method: "POST",
+            body: JSON.stringify({ kind, data_url: dataUrl })
+        });
+
+        // Store the path (round-trippable), render the signed URL.
+        if (kind === "signature") {
+            resumeState.profile.signature_url = data.path;
+            renderResumeImage("signature", data.display_url, data.path);
+        } else {
+            resumeState.profile.profile_picture_url = data.path;
+            // Keep the name so the uploaded file stays identifiable after a
+            // reload, when the stored path alone is all we have.
+            resumeState.profilePictureName = file.name;
+            resumeState.careerPulseAvatar = "";
+            renderResumeImage("profile-picture", data.display_url, data.path);
+        }
+        showToast(data.message || "Image uploaded");
+    } catch (err) {
+        showToast(err.message || "Upload failed.");
+    } finally {
+        input.value = "";
+        resumeSetBusy(btnId, false, kind === "signature" ? "Upload Signature" : "Upload Picture");
+    }
+}
+
+async function clearResumeImage(kind) {
+    if (!confirm("Remove this image?")) return;
+    try {
+        await resumeRequest("/api/resume/asset/clear", {
+            method: "POST",
+            body: JSON.stringify({ kind })
+        });
+        if (kind === "signature") {
+            resumeState.profile.signature_url = null;
+            renderResumeImage("signature", null, null);
+        } else {
+            resumeState.profile.profile_picture_url = null;
+            resumeState.profilePictureName = "";
+            // Clear the file input so the same file can be re-selected later.
+            const input = document.getElementById("resumeProfilePicInput");
+            if (input) input.value = "";
+            // Reveals the CareerPulse profile picture as the fallback.
+            renderResumeImage("profile-picture", null, null);
+        }
+        showToast("Image removed");
+    } catch (err) {
+        showToast(err.message || "Could not remove image.");
+    }
+}
+
+/* Cleared on logout so one user's resume is never rendered for the next. */
+function resetResumeState() {
+    resumeState.loaded = false;
+    resumeState.loading = false;
+    resumeState.inFlight = false;
+    resumeState.error = null;
+    resumeState.profile = {};
+    RESUME_ENTRY_SECTIONS.forEach(section => { resumeState[section] = []; });
+    RESUME_ITEM_SECTIONS.forEach(section => {
+        resumeState[section] = [];
+        resumeState.pendingItems[section] = [];
+    });
+    resumeState.totalExperienceDisplay = "0 years 0 months";
+    resumeState.profilePictureName = "";
+    resumeState.careerPulseAvatar = "";
+    resumeState.editing = {};
 }
 
 // Session Token Retrieval & Refresh Helper
@@ -384,6 +1372,9 @@ function showAuthenticatedUI(user) {
     const name = user.name || "Jeshurun Selvakumar";
     const email = user.email || "";
     const profilePicUrl = user.profile_picture || "";
+    // Remember it so the Resume Builder can fall back to it when the user has
+    // no resume photo. Stored only in state, never copied into the resume row.
+    if (typeof resumeState !== "undefined") resumeState.careerPulseAvatar = profilePicUrl;
     const headline = user.headline || "Computer Engineering Student | SIES GST";
     const location = user.location || "Mumbai / Navi Mumbai";
     const skillsArr = user.skills || ["Python", "Java", "C", "React", "JavaScript", "SQL", "FastAPI"];
@@ -436,6 +1427,8 @@ function clearUserState() {
     resetApplicationsState();
     // Personalized news is per-user: never let one account see another's feed.
     resetPersonalizedNews();
+    // Resume data is per-user too: never leave one account's resume in the DOM.
+    resetResumeState();
     authState.authenticated = false;
     authState.user = null;
 
@@ -508,6 +1501,7 @@ function navigateTo(view) {
     // Load personalized news the first time the tab is opened only.
     if (view === "news") loadPersonalizedNews();
     if (view === "applications") loadApplicationsView();
+    if (view === "resume") loadResumeView();
 }
 
 /* ------------------------------------------------------------------
@@ -1960,5 +2954,15 @@ function showToast(msg) {
     toast.className = "px-4 py-3 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white shadow-2xl flex items-center gap-2";
     toast.innerHTML = `<span class="w-2 h-2 rounded-full bg-indigo-400"></span><span>${escapeHtml(msg)}</span>`;
     container.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
+        setTimeout(() => toast.remove(), 3000);
+    }
+
+/* ---------- Progressive Web App ---------- */
+/* Registered on window load so it never competes with authentication
+   initialisation. Failure is non-fatal: the app works normally without it. */
+if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js")
+            .catch(error => console.error("PWA service worker registration failed:", error));
+    });
 }

@@ -100,3 +100,27 @@
 .animate-swipe-down {
     animation: swipeDown 0.35s ease-out forwards;
 }
+/* ===================================================================
+   RESUME PREVIEW (A4) - fixed 210mm sheet, scoped so nothing else in
+   the dashboard inherits these rules.
+   =================================================================== */
+.resume-a4{width:210mm;min-height:297mm;margin:0 auto;background:#fff;color:#111827;padding:14mm 15mm;box-sizing:border-box;font-size:10.5pt;line-height:1.45;box-shadow:0 10px 40px rgba(0,0,0,.45)}
+.resume-a4 *{box-sizing:border-box}
+.resume-a4 h1,.resume-a4 h2,.resume-a4 h3,.resume-a4 p,.resume-a4 ul{margin:0}
+.resume-a4 .rv-head{display:flex;gap:6mm;align-items:flex-start;padding-bottom:4mm;border-bottom:2px solid #111827}
+.resume-a4 .rv-photo{width:26mm;height:26mm;border-radius:50%;object-fit:cover;border:1px solid #d1d5db;flex-shrink:0}
+.resume-a4 .rv-name{font-size:20pt;font-weight:700;line-height:1.15}
+.resume-a4 .rv-role{font-size:11.5pt;color:#374151;margin-top:1mm}
+.resume-a4 .rv-contact{margin-top:2mm;font-size:9pt;color:#4b5563;display:flex;flex-wrap:wrap;gap:1mm 4mm}
+.resume-a4 .rv-section{margin-top:5mm}
+.resume-a4 .rv-title{font-size:10pt;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;border-bottom:1px solid #d1d5db;padding-bottom:1mm;margin-bottom:2.5mm}
+.resume-a4 .rv-item{margin-bottom:3mm;break-inside:avoid}
+.resume-a4 .rv-row{display:flex;justify-content:space-between;gap:4mm;align-items:baseline}
+.resume-a4 .rv-strong{font-weight:700}
+.resume-a4 .rv-meta{font-size:9pt;color:#4b5563;white-space:nowrap}
+.resume-a4 .rv-body{margin-top:1mm;white-space:pre-wrap}
+.resume-a4 .rv-chips{display:flex;flex-wrap:wrap;gap:1.5mm}
+.resume-a4 .rv-chip{border:1px solid #d1d5db;border-radius:999px;padding:.6mm 2.5mm;font-size:9pt;background:#f9fafb}
+.resume-a4 .rv-sig{margin-top:8mm;display:flex;justify-content:flex-end}
+.resume-a4 .rv-sig img{max-height:18mm;max-width:55mm;object-fit:contain}
+@media print{body *{visibility:hidden!important}#resumePreviewModal,#resumePreviewModal *{visibility:visible!important}#resumePreviewModal{position:static!important;background:#fff!important;padding:0!important;overflow:visible!important}#resumePreviewModal>div{border:0!important;background:#fff!important;box-shadow:none!important;max-width:none!important;margin:0!important}#resumePreviewModal>div>div:first-child{display:none!important}#resumePreviewBody{background:#fff!important;padding:0!important}.resume-a4{width:auto;min-height:0;box-shadow:none;padding:0;margin:0}@page{size:A4;margin:14mm}}

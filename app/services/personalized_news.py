@@ -790,7 +790,7 @@ def _get_cache(supabase_client: Any, user_id: str) -> Optional[Dict[str, Any]]:
                 articles = row.get("articles")
                 if isinstance(articles, str):
                     articles = json.loads(articles)
-                _SUPABASE_CACHE_SUPPORTED = True
+                _supabase_cache_supported = True
                 _MEMORY_CACHE[user_id] = {
                     "fingerprint": row.get("profile_fingerprint"),
                     "fetched_at": float(row.get("fetched_at") or 0),
@@ -805,6 +805,8 @@ def _get_cache(supabase_client: Any, user_id: str) -> Optional[Dict[str, Any]]:
 
 
 def _set_cache(supabase_client: Any, user_id: str, fingerprint: str, articles: List[Dict[str, Any]]) -> None:
+    global _supabase_cache_supported
+
     payload = {
         "user_id": user_id,
         "profile_fingerprint": fingerprint,

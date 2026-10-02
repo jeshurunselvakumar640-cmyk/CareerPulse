@@ -499,7 +499,11 @@ async def get_personalized_tech_news(
         profile,
         limit=limit,
         refresh=bool(refresh),
-        supabase_client=supabase,
+        # user_news_cache is RLS-protected, so the anon client cannot read or
+        # write it. Reuse the same server-side service-role client the mailbox
+        # handlers use. It bypasses RLS and is never returned to the browser.
+        # Falls back to the default client when no service-role key is set.
+        supabase_client=mailbox_supabase or supabase,
     )
     return result
 

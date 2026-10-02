@@ -231,7 +231,7 @@ async def linkedin_login(request: Request):
     try:
         base_url = str(request.base_url).rstrip("/")
         redirect_uri = f"{base_url}/api/auth/callback"
-        
+       
         res = supabase.auth.sign_in_with_oauth({
             "provider": "linkedin_oidc",
             "options": {"redirect_to": redirect_uri}
@@ -239,6 +239,25 @@ async def linkedin_login(request: Request):
         return RedirectResponse(url=res.url)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/auth/google")
+async def google_login(request: Request):
+    try:
+        base_url = str(request.base_url).rstrip("/")
+        redirect_uri = f"{base_url}/api/auth/callback"
+
+        res = supabase.auth.sign_in_with_oauth({
+            "provider": "google",
+            "options": {
+                "redirect_to": redirect_uri
+            }
+        })
+
+        return RedirectResponse(url=res.url)
+
+    except Exception as e:
+        logger.error("Google OAuth error: %s", str(e))
+        raise HTTPException(status_code=500, detail="Unable to start Google login")
 
 @app.get("/api/auth/callback")
 async def auth_callback(code: str):

@@ -17,6 +17,7 @@ from supabase import create_client, Client
 from google import genai
 
 from app.config import settings
+from app.services.supabase_client import get_service_role_client
 from app.services.tavily_search import search_live_content_via_tavily
 from app.services.ai_matcher import enrich_single_job
 from app.services.contact_lookup import lookup_company_contact
@@ -35,6 +36,7 @@ from app.services.daily_digest import (
 from app.services import gmail_client
 from app.services.gmail_client import MailboxError, MailboxNotConfigured
 from app.services import reply_tracker
+from app.services.reply_tracker import MigrationRequired
 
 logging.basicConfig(
     level=logging.INFO,
@@ -57,6 +59,16 @@ app.add_middleware(
 )
 
 supabase: Client = create_client(settings.supabase_url, settings.supabase_key)
+
+# Mailbox tables are protected by Row Level Security, which rejects anon writes.
+# The OAuth callback and reply sync therefore need a service-role client. It is
+# used only inside these handlers and is never exposed to the browser.
+mailbox_supabase: Optional[Client] = get_service_role_client()
+if mailbox_supabase is None:
+    logger.warning(
+        "SUPABASE_SERVICE_ROLE_KEY is not set. Mailbox connections and replies "
+        "use the anon key, so writes to RLS-protected tables will be rejected."
+    )
 
 # -------------------------------------------------------------------
 # NATIVE 5:00 AM AUTOMATED SCHEDULER
@@ -616,7 +628,7 @@ async def send_outreach_email(req: EmailSendRequest, auth_tuple=Depends(require_
         # subject, body, status, sent_at) and extended with the message id and
         # provider thread fields so a company reply can be matched later.
         reply_tracker.record_sent_email(
-            supabase=supabase,
+            supabase=_mailbox_db(),
             user_id=user.id,
             opportunity_id=req.opportunity_id,
             recipient_email=req.to_email,
@@ -675,6 +687,18 @@ GMAIL_OAUTH_COOKIE = "cp-gmail-oauth"
 GMAIL_REDIRECT_COOKIE = "cp-gmail-redirect"
 GMAIL_OAUTH_MAX_AGE = 600
 
+
+def _mailbox_db() -> Client:
+    """
+    Database handle for mailbox and reply tables.
+
+    These tables are protected by Row Level Security, which rejects anon writes.
+    The service-role client bypasses RLS and is used server-side only; it never
+    reaches the browser. Falls back to the default client when no service-role
+    key is configured.
+    """
+    return mailbox_supabase or supabase
+
 # Provider-safe messages for the UI. Raw OAuth/API errors are never returned.
 _MAILBOX_ERROR_MESSAGES = {
     "not_configured": "Gmail integration is not configured on this server yet.",
@@ -728,8 +752,8 @@ def _gmail_redirect_uri(request: Request) -> str:
 async def email_integration_status(auth_tuple=Depends(require_auth_token_and_user)):
     """Render state only: connection flags, mailbox address, scopes, sync time."""
     _, user = auth_tuple
-    status = reply_tracker.mailbox_integration_status(supabase, user.id)
-    status["unread_replies"] = reply_tracker.count_unread_replies(supabase, user.id)
+    status = reply_tracker.mailbox_integration_status(_mailbox_db(), user.id)
+    status["unread_replies"] = reply_tracker.count_unread_replies(_mailbox_db(), user.id)
     return {"status": "success", **status}
 
 @app.get("/api/email/integration/connect")
@@ -794,6 +818,18 @@ async def email_integration_callback(request: Request, code: Optional[str] = Non
     token, user = get_current_token_and_user(request, None)
     state_payload = gmail_client.read_signed_state(state) if state else None
 
+    # Lifecycle trace. Only shapes and booleans are logged: no token, code,
+    # secret or state value is ever written.
+    logger.info(
+        "Gmail OAuth callback received: code_present=%s code_length=%d "
+        "state_present=%s state_length=%d provider_error=%s "
+        "session_cookie_present=%s session_resolved=%s signed_state_valid=%s",
+        bool(code), len(code or ""), bool(state), len(state or ""), error or "(none)",
+        bool(request.cookies.get("sb-access-token")),
+        bool(user),
+        bool(state_payload),
+    )
+
     if not user and state_payload:
         logger.info(
             "Resolving the Gmail connection from a signed OAuth state because "
@@ -803,14 +839,28 @@ async def email_integration_callback(request: Request, code: Optional[str] = Non
     elif user:
         user_id = user.id
     else:
+        logger.warning(
+            "Gmail OAuth callback aborted: no authenticated session and no valid "
+            "signed state, so there is no user to attach the mailbox to."
+        )
         return RedirectResponse(url="/?error=signin_required")
+
+    logger.info(
+        "User resolution for the Gmail callback: source=%s user_id_present=%s.",
+        "session" if user else ("signed_state" if state_payload else "none"),
+        bool(user_id),
+    )
 
     # With a live session the cookie must still match: it proves this browser
     # started the flow. Without a session the signed state is the only proof.
     if user is not None:
         stored_state = request.cookies.get(GMAIL_OAUTH_COOKIE)
         if not state or not stored_state or not hmac.compare_digest(state, stored_state):
-            logger.warning("Rejected a Gmail OAuth callback with an invalid state value.")
+            logger.warning(
+                "Rejected a Gmail OAuth callback: state cookie missing or does not "
+                "match the returned state (cookie_present=%s state_present=%s).",
+                bool(stored_state), bool(state),
+            )
             return RedirectResponse(url="/app#applications&mailbox=state_mismatch")
 
     if error:
@@ -818,12 +868,19 @@ async def email_integration_callback(request: Request, code: Optional[str] = Non
         return RedirectResponse(url="/app#applications&mailbox=denied")
 
     if not code:
+        logger.warning("Gmail OAuth callback arrived without an authorization code.")
         return RedirectResponse(url="/app#applications&mailbox=missing_code")
 
     # The redirect URI stored at connect time is the exact string Google
     # received on the authorize request. Reusing it guarantees the token
     # request repeats it byte for byte.
     redirect_uri = request.cookies.get(GMAIL_REDIRECT_COOKIE) or _gmail_redirect_uri(request)
+    logger.info(
+        "Gmail OAuth callback: exchanging the authorization code "
+        "(redirect_uri_source=%s, code_length=%d).",
+        "cookie" if request.cookies.get(GMAIL_REDIRECT_COOKIE) else "derived",
+        len(code or ""),
+    )
 
     try:
         bundle = gmail_client.exchange_authorization_code(code, redirect_uri)
@@ -831,12 +888,22 @@ async def email_integration_callback(request: Request, code: Optional[str] = Non
         # connection: never persist it and never report it as connected.
         if not (bundle.mailbox_email or "").strip():
             logger.warning(
-                "Gmail OAuth completed without a resolved mailbox address; "
-                "the connection was not saved."
+                "Gmail OAuth token exchange succeeded but returned no mailbox "
+                "address; the connection was not saved."
             )
             return RedirectResponse(url="/app#applications&mailbox=email_unresolved")
+
+        logger.info(
+            "Gmail OAuth token exchange succeeded: mailbox_resolved=%s "
+            "has_refresh_token=%s token_expires_at_set=%s granted_scopes_present=%s.",
+            bool(bundle.mailbox_email),
+            bool(bundle.refresh_token),
+            bundle.expires_at is not None,
+            bool(bundle.scopes),
+        )
+
         reply_tracker.save_connection(
-            supabase=supabase,
+            supabase=_mailbox_db(),
             user_id=user_id,
             access_token=bundle.access_token,
             refresh_token=bundle.refresh_token,
@@ -844,14 +911,44 @@ async def email_integration_callback(request: Request, code: Optional[str] = Non
             scopes=bundle.scopes,
             mailbox_email=bundle.mailbox_email,
         )
+        logger.info(
+            "save_connection() returned without raising: the mailbox connection "
+            "for this user is stored and the callback is succeeding."
+        )
     except MailboxNotConfigured as e:
-        logger.warning("Gmail OAuth is not configured: %s", e)
+        logger.error(
+            "Gmail OAuth callback failed at configuration check: %s", e
+        )
         return RedirectResponse(url="/app#applications&mailbox=not_configured")
+    except MigrationRequired as e:
+        logger.error(
+            "Gmail OAuth callback could not persist the connection because the "
+            "reply tracking migration has not been applied: %s", e
+        )
+        return RedirectResponse(url="/app#applications&mailbox=migration_required")
     except MailboxError as e:
         code_name = getattr(e, "code", "mailbox_error")
-        logger.warning("Gmail OAuth failed (%s)", code_name)
+        # The detail is logged for the operator only. The browser receives the
+        # error code, never this text.
+        logger.error(
+            "Gmail OAuth callback failed before the connection was stored "
+            "(error_code=%s, exception=%s): %s",
+            code_name, type(e).__name__, e,
+        )
         return RedirectResponse(url=f"/app#applications&mailbox={code_name}")
+    except Exception as e:
+        # Anything unexpected still has to be visible: a silent 500 here is what
+        # leaves a completed OAuth flow with no stored connection.
+        logger.exception(
+            "Gmail OAuth callback raised an unexpected error (exception=%s): %s",
+            type(e).__name__, e,
+        )
+        return RedirectResponse(url="/app#applications&mailbox=provider_error")
 
+    logger.info(
+        "Gmail OAuth callback completed: connection stored, redirecting to the "
+        "dashboard."
+    )
     response = RedirectResponse(url="/app#applications&mailbox=connected")
     response.delete_cookie(key=GMAIL_OAUTH_COOKIE, path="/")
     response.delete_cookie(key=GMAIL_REDIRECT_COOKIE, path="/")
@@ -861,7 +958,7 @@ async def email_integration_callback(request: Request, code: Optional[str] = Non
 async def email_integration_disconnect(auth_tuple=Depends(require_auth_token_and_user)):
     """Remove the stored mailbox connection and its tokens for this user."""
     _, user = auth_tuple
-    removed = reply_tracker.disconnect_mailbox(supabase, user.id)
+    removed = reply_tracker.disconnect_mailbox(_mailbox_db(), user.id)
     return {"status": "success", "disconnected": removed}
 
 @app.post("/api/email/sync")
@@ -869,7 +966,7 @@ async def sync_email_replies(req: Optional[ReplySyncRequest] = None, auth_tuple=
     """Check the connected mailbox for new company replies to tracked applications."""
     _, user = auth_tuple
     force = bool(req.force) if req else False
-    result = await reply_tracker.sync_replies(supabase, user.id, force=force)
+    result = await reply_tracker.sync_replies(_mailbox_db(), user.id, force=force)
 
     if result.get("status") == "error":
         error_code = result.get("error_code") or "mailbox_error"
@@ -884,17 +981,17 @@ async def list_email_replies(
 ):
     """Replies linked to the current user's applications. Ownership is server-side."""
     _, user = auth_tuple
-    replies = reply_tracker.list_replies(supabase, user.id, limit=limit, unread_only=unread_only)
+    replies = reply_tracker.list_replies(_mailbox_db(), user.id, limit=limit, unread_only=unread_only)
     return {
         "status": "success",
         "replies": replies,
-        "unread_count": reply_tracker.count_unread_replies(supabase, user.id),
+        "unread_count": reply_tracker.count_unread_replies(_mailbox_db(), user.id),
     }
 
 @app.get("/api/email/replies/{reply_id}")
 async def get_email_reply(reply_id: str, auth_tuple=Depends(require_auth_token_and_user)):
     _, user = auth_tuple
-    reply = reply_tracker.get_reply(supabase, user.id, reply_id)
+    reply = reply_tracker.get_reply(_mailbox_db(), user.id, reply_id)
     if not reply:
         raise HTTPException(status_code=404, detail="Reply not found.")
     return {"status": "success", "reply": reply}
@@ -902,29 +999,29 @@ async def get_email_reply(reply_id: str, auth_tuple=Depends(require_auth_token_a
 @app.post("/api/email/replies/{reply_id}/read")
 async def mark_email_reply_read(reply_id: str, auth_tuple=Depends(require_auth_token_and_user)):
     _, user = auth_tuple
-    if not reply_tracker.mark_reply_read(supabase, user.id, reply_id):
+    if not reply_tracker.mark_reply_read(_mailbox_db(), user.id, reply_id):
         raise HTTPException(status_code=404, detail="Reply not found.")
     return {
         "status": "success",
-        "unread_count": reply_tracker.count_unread_replies(supabase, user.id),
+        "unread_count": reply_tracker.count_unread_replies(_mailbox_db(), user.id),
     }
 
 @app.get("/api/applications")
 async def list_applications(auth_tuple=Depends(require_auth_token_and_user)):
     """Application communication list: sent, replied, interview requested, etc."""
     _, user = auth_tuple
-    applications = reply_tracker.list_applications(supabase, user.id)
+    applications = reply_tracker.list_applications(_mailbox_db(), user.id)
     return {
         "status": "success",
         "applications": applications,
-        "unread_replies": reply_tracker.count_unread_replies(supabase, user.id),
+        "unread_replies": reply_tracker.count_unread_replies(_mailbox_db(), user.id),
     }
 
 @app.get("/api/opportunities/{opportunity_id}/conversation")
 async def get_opportunity_conversation(opportunity_id: str, auth_tuple=Depends(require_auth_token_and_user)):
     """Full chronological conversation for one opportunity of this user."""
     _, user = auth_tuple
-    return reply_tracker.get_conversation(supabase, user.id, opportunity_id)
+    return reply_tracker.get_conversation(_mailbox_db(), user.id, opportunity_id)
 
 @app.post("/api/email/draft-response")
 async def draft_email_response(req: ReplyDraftRequest, auth_tuple=Depends(require_auth_token_and_user)):
@@ -938,7 +1035,7 @@ async def draft_email_response(req: ReplyDraftRequest, auth_tuple=Depends(requir
     if not req.opportunity_id:
         raise HTTPException(status_code=400, detail="An opportunity id is required.")
     result = await reply_tracker.draft_reply_response(
-        supabase, user.id, req.opportunity_id, user.user_metadata or {}
+        _mailbox_db(), user.id, req.opportunity_id, user.user_metadata or {}
     )
     if result.get("status") == "error":
         raise HTTPException(status_code=404, detail=result.get("detail", "Nothing to respond to yet."))

@@ -308,16 +308,31 @@ def mailbox_integration_status(supabase, user_id: str) -> Dict:
     if not connection:
         return status
 
+    resolved_email = (connection.get("mailbox_email") or "").strip() or None
+    is_connected = connection.get("status") == "connected" and bool(resolved_email)
+
+    # A stored row that is not reported as connected is the anomaly worth
+    # surfacing, so log it rather than leaving the UI silently disconnected.
+    if connection.get("status") == "connected" and not resolved_email:
+        logger.warning(
+            "A mailbox connection exists for this user but has no resolved "
+            "address, so it is reported as not connected. It will be repaired on "
+            "the next sync, or the user must reconnect."
+        )
+    elif not is_connected:
+        logger.info(
+            "Mailbox connection found but not active (status=%s, address_resolved=%s).",
+            connection.get("status"), bool(resolved_email),
+        )
+
     status.update({
         # A connection counts as connected only when it is active AND its Gmail
         # identity was verified. An unresolved address is reported as
         # not connected so the UI offers a reconnect instead of a false success.
-        "connected": connection.get("status") == "connected" and bool(
-            (connection.get("mailbox_email") or "").strip()
-        ),
+        "connected": is_connected,
         "needs_reconnect": connection.get("status") == "needs_reconnect",
         "provider": connection.get("provider"),
-        "email": (connection.get("mailbox_email") or "").strip() or None,
+        "email": resolved_email,
         "last_sync_at": connection.get("last_sync_at"),
         "last_sync_error": connection.get("last_sync_error"),
     })
@@ -378,8 +393,27 @@ def save_connection(
         "last_sync_error": None,
     }
 
+    # Field presence only: the values themselves are never logged.
+    logger.info(
+        "Upserting into public.%s (on_conflict=user_id): provider=%s status=%s "
+        "mailbox_email_set=%s access_token_encrypted_set=%s "
+        "refresh_token_encrypted_set=%s scopes_set=%s token_expires_at_set=%s.",
+        MAILBOX_TABLE,
+        payload["provider"],
+        payload["status"],
+        bool(payload["mailbox_email"]),
+        bool(payload["access_token_encrypted"]),
+        bool(payload["refresh_token_encrypted"]),
+        bool(payload["scopes"]),
+        bool(payload["token_expires_at"]),
+    )
+
     try:
-        supabase.table(MAILBOX_TABLE).upsert(payload, on_conflict="user_id").execute()
+        result = supabase.table(MAILBOX_TABLE).upsert(payload, on_conflict="user_id").execute()
+        logger.info(
+            "Supabase accepted the mailbox_connections upsert (rows returned=%s).",
+            len(getattr(result, "data", None) or []),
+        )
     except Exception as e:
         if _error_is_missing_relation(e):
             _supports_connections[MAILBOX_TABLE] = False
@@ -391,22 +425,42 @@ def save_connection(
         # the PostgREST error code and message are logged; the payload holds
         # encrypted tokens and is never included.
         message = str(e)
-        if "PGRST301" in message or "row-level security" in message.lower() or "permission denied" in message.lower():
+        lowered = message.lower()
+        if (
+            "pgrst301" in lowered
+            or "row-level security" in lowered
+            or "permission denied" in lowered
+            or "42501" in message
+        ):
             logger.error(
-                "Supabase refused the mailbox_connections write for this user "
-                "(RLS or permissions). Check the table's policies and the API "
-                "key's role: %s",
-                message[:200],
+                "Supabase refused the write to public.%s: row-level security or "
+                "permissions rejected it (exception=%s). This is the anon key "
+                "hitting an RLS-protected table: set SUPABASE_SERVICE_ROLE_KEY "
+                "so the backend writes through a service-role client. Detail: %s",
+                MAILBOX_TABLE,
+                type(e).__name__,
+                message[:400],
+            )
+        elif "401" in message or "jwt" in lowered or "apikey" in lowered:
+            logger.error(
+                "Supabase rejected the write to public.%s: the configured key is "
+                "missing, invalid or expired (exception=%s). Detail: %s",
+                MAILBOX_TABLE,
+                type(e).__name__,
+                message[:400],
             )
         else:
             logger.error(
-                "Could not save the mailbox connection (provider=%s, "
-                "has_access_token=%s, has_refresh_token=%s, mailbox_email_set=%s): %s",
+                "Could not save the mailbox connection to public.%s "
+                "(provider=%s, has_access_token=%s, has_refresh_token=%s, "
+                "mailbox_email_set=%s, exception=%s): %s",
+                MAILBOX_TABLE,
                 provider,
                 bool(payload["access_token_encrypted"]),
                 bool(payload["refresh_token_encrypted"]),
                 bool(payload["mailbox_email"]),
-                message[:200],
+                type(e).__name__,
+                message[:400],
             )
         raise MailboxProviderError("Could not save the mailbox connection.")
 

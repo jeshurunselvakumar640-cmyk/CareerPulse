@@ -16,6 +16,9 @@ class Settings:
             self.tavily_api_key = os.getenv("TAVILY_API_KEY", "")
             self.supabase_url = os.getenv("SUPABASE_URL", "")
             self.supabase_key = os.getenv("SUPABASE_KEY", "")
+            # Service-role key for server-side writes to RLS-protected tables
+            # (mailbox_connections, email_replies). Server use only.
+            self.supabase_service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
             self.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
 
             # LinkedIn OAuth Configuration
@@ -72,6 +75,7 @@ class Settings:
             self.tavily_api_key = ""
             self.supabase_url = ""
             self.supabase_key = ""
+            self.supabase_service_role_key = ""
             self.gemini_api_key = ""
             self.linkedin_client_id = ""
             self.linkedin_client_secret = ""

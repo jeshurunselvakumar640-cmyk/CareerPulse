@@ -124,6 +124,10 @@ def build_news_profile(metadata: Dict[str, Any], user_id: Optional[str] = None) 
             return []
         if isinstance(value, str):
             value = [value]
+        # user_metadata is Dict[str, Any], so a profile field can hold a scalar.
+        # Anything that is not iterable is dropped rather than raising.
+        if not isinstance(value, (list, tuple, set, dict)):
+            return []
         out = []
         for item in value:
             if not isinstance(item, str):
@@ -141,7 +145,7 @@ def build_news_profile(metadata: Dict[str, Any], user_id: Optional[str] = None) 
                 result.append(s)
         return result
 
-    headline = (metadata.get("headline") or "").strip()
+    headline = str(metadata.get("headline") or "").strip()
     interests = clean_list(metadata.get("interests"))
     roles = clean_list(metadata.get("preferred_roles")) or ([headline] if headline else [])
 
@@ -151,9 +155,9 @@ def build_news_profile(metadata: Dict[str, Any], user_id: Optional[str] = None) 
         "interests": interests,
         "roles": roles,
         "domains": clean_list(metadata.get("preferred_domains")),
-        "experience_level": (metadata.get("experience_level") or "").strip(),
+        "experience_level": str(metadata.get("experience_level") or "").strip(),
         "headline": headline,
-        "location": (metadata.get("location") or "").strip(),
+        "location": str(metadata.get("location") or "").strip(),
     }
 
 

@@ -123,4 +123,704 @@
 .resume-a4 .rv-chip{border:1px solid #d1d5db;border-radius:999px;padding:.6mm 2.5mm;font-size:9pt;background:#f9fafb}
 .resume-a4 .rv-sig{margin-top:8mm;display:flex;justify-content:flex-end}
 .resume-a4 .rv-sig img{max-height:18mm;max-width:55mm;object-fit:contain}
-@media print{body *{visibility:hidden!important}#resumePreviewModal,#resumePreviewModal *{visibility:visible!important}#resumePreviewModal{position:static!important;background:#fff!important;padding:0!important;overflow:visible!important}#resumePreviewModal>div{border:0!important;background:#fff!important;box-shadow:none!important;max-width:none!important;margin:0!important}#resumePreviewModal>div>div:first-child{display:none!important}#resumePreviewBody{background:#fff!important;padding:0!important}.resume-a4{width:auto;min-height:0;box-shadow:none;padding:0;margin:0}@page{size:A4;margin:14mm}}
+/* ===================================================================
+   Resume template picker + the three A4 templates (Template 1, 2, 3).
+   The preview markup is shared; `data-template` on the sheet scopes the
+   visual differences so no template can affect another.
+   =================================================================== */
+
+/* SVG icons used within resume templates */
+.rv-svg-icon {
+    display: inline-block;
+    vertical-align: middle;
+    width: 1em;
+    height: 1em;
+}
+
+/* Template Picker */
+#resumeTemplatePicker .tpl-card {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    padding: .5rem;
+    text-align: left;
+    border: 1px solid #1e293b;
+    border-radius: .75rem;
+    background: #0f172a;
+    cursor: pointer;
+    transition: border-color .15s, background .15s, box-shadow .15s, transform .15s;
+}
+#resumeTemplatePicker .tpl-card:hover {
+    border-color: #334155;
+    background: #111c33;
+    transform: translateY(-2px);
+}
+#resumeTemplatePicker .tpl-card:focus-visible {
+    outline: 2px solid #6366f1;
+    outline-offset: 2px;
+}
+#resumeTemplatePicker .tpl-card[aria-pressed="true"] {
+    border-color: #6366f1;
+    background: #131f3d;
+    box-shadow: 0 0 0 1px #6366f1 inset, 0 6px 18px -10px rgba(99,102,241,.9);
+}
+#resumeTemplatePicker .tpl-thumb {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 210/297;
+    width: 100%;
+    border-radius: .45rem;
+    background: #1e293b;
+    overflow: hidden;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+#resumeTemplatePicker .tpl-thumb-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+#resumeTemplatePicker .tpl-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: .15rem;
+    min-width: 0;
+}
+#resumeTemplatePicker .tpl-card-label {
+    font-size: .8rem;
+    font-weight: 700;
+    color: #e2e8f0;
+    line-height: 1.2;
+}
+#resumeTemplatePicker .tpl-card-tag {
+    font-size: .65rem;
+    color: #94a3b8;
+    line-height: 1.2;
+}
+#resumeTemplatePicker .tpl-card[aria-pressed="true"] .tpl-card-label {
+    color: #fff;
+}
+
+/* Base print / avoidance rules */
+.resume-a4 .rv-section { break-inside: auto; }
+.resume-a4 .rv-title { break-after: avoid; }
+.resume-a4 .rv-item, .resume-a4 .rv-sig { break-inside: avoid; page-break-inside: avoid; }
+
+/* ===================================================================
+   TEMPLATE 1 (Warm Terracotta Header + Two-Column Layout)
+   =================================================================== */
+.resume-a4[data-template="template-1"] {
+    padding: 0;
+    overflow: hidden;
+    position: relative;
+    background: #ffffff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+.resume-a4[data-template="template-1"] .t1-header-container {
+    position: relative;
+    background: #ffffff;
+    overflow: visible;
+}
+.resume-a4[data-template="template-1"] .t1-header {
+    position: relative;
+    background-color: #d97d54;
+    padding: 9mm 12mm 14mm 12mm;
+    clip-path: polygon(0 0, 100% 0, 100% 74%, 0 100%);
+    min-height: 38mm;
+    display: flex;
+    align-items: flex-start;
+}
+.resume-a4[data-template="template-1"] .t1-header-text {
+    max-width: 60%;
+}
+.resume-a4[data-template="template-1"] .t1-name {
+    font-size: 21pt;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #111827;
+    line-height: 1.1;
+    margin: 0;
+}
+.resume-a4[data-template="template-1"] .t1-headline {
+    font-size: 10.5pt;
+    font-weight: 500;
+    color: #262626;
+    margin-top: 1.5mm;
+}
+.resume-a4[data-template="template-1"] .t1-photo-wrap {
+    position: absolute;
+    top: 6mm;
+    right: 12mm;
+    width: 32mm;
+    height: 32mm;
+    border-radius: 50%;
+    background: #ffffff;
+    padding: 1.5mm;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    z-index: 5;
+    overflow: hidden;
+}
+.resume-a4[data-template="template-1"] .t1-photo {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+}
+.resume-a4[data-template="template-1"] .t1-photo-empty {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: rgba(217, 125, 84, 0.2);
+}
+.resume-a4[data-template="template-1"] .t1-body {
+    display: flex;
+    gap: 8mm;
+    padding: 3mm 12mm 10mm 12mm;
+    background: #ffffff;
+}
+.resume-a4[data-template="template-1"] .t1-col-left {
+    flex: 0 0 38%;
+    width: 38%;
+}
+.resume-a4[data-template="template-1"] .t1-col-right {
+    flex: 1 1 58%;
+    min-width: 0;
+}
+.resume-a4[data-template="template-1"] .t1-sec {
+    margin-bottom: 5mm;
+    break-inside: avoid;
+}
+.resume-a4[data-template="template-1"] .t1-sec-title {
+    font-size: 9.5pt;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #111827;
+    margin-bottom: 2mm;
+}
+.resume-a4[data-template="template-1"] .t1-contact-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.2mm;
+    font-size: 8.5pt;
+    color: #374151;
+    line-height: 1.35;
+}
+.resume-a4[data-template="template-1"] .t1-contact-item {
+    word-break: break-word;
+}
+.resume-a4[data-template="template-1"] .t1-contact-label {
+    font-weight: 600;
+    color: #111827;
+    margin-right: 1mm;
+}
+.resume-a4[data-template="template-1"] .t1-contact-item a {
+    color: #1d4ed8;
+    text-decoration: none;
+}
+.resume-a4[data-template="template-1"] .t1-text {
+    font-size: 8.5pt;
+    color: #374151;
+    line-height: 1.4;
+    white-space: pre-wrap;
+}
+.resume-a4[data-template="template-1"] .t1-list {
+    margin: 0;
+    padding-left: 4.5mm;
+    list-style-type: disc;
+}
+.resume-a4[data-template="template-1"] .t1-list li {
+    font-size: 8.5pt;
+    color: #374151;
+    margin-bottom: 0.8mm;
+}
+.resume-a4[data-template="template-1"] .t1-item {
+    margin-bottom: 3.5mm;
+    break-inside: avoid;
+}
+.resume-a4[data-template="template-1"] .t1-item-title {
+    font-size: 9.5pt;
+    font-weight: 700;
+    color: #111827;
+    line-height: 1.25;
+}
+.resume-a4[data-template="template-1"] .t1-item-meta {
+    font-size: 8pt;
+    color: #4b5563;
+    margin-top: 0.4mm;
+}
+.resume-a4[data-template="template-1"] .t1-item-role {
+    font-size: 9pt;
+    font-weight: 500;
+    color: #1f2937;
+    margin-top: 0.4mm;
+}
+.resume-a4[data-template="template-1"] .t1-item-body {
+    font-size: 8.5pt;
+    color: #374151;
+    line-height: 1.38;
+    margin-top: 0.8mm;
+    white-space: pre-wrap;
+}
+.resume-a4[data-template="template-1"] .t1-link {
+    font-size: 8pt;
+    margin-top: 0.5mm;
+    word-break: break-all;
+}
+.resume-a4[data-template="template-1"] .t1-link a {
+    color: #1d4ed8;
+    text-decoration: none;
+}
+.resume-a4[data-template="template-1"] .t1-sig {
+    margin-top: 4mm;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    break-inside: avoid;
+}
+.resume-a4[data-template="template-1"] .t1-sig img {
+    max-height: 14mm;
+    max-width: 48mm;
+    object-fit: contain;
+}
+.resume-a4[data-template="template-1"] .t1-sig-line {
+    font-size: 7.5pt;
+    color: #6b7280;
+    border-top: 1px solid #cbd5e1;
+    margin-top: 1mm;
+    padding-top: 0.5mm;
+    width: 45mm;
+    text-align: center;
+}
+
+/* ===================================================================
+   TEMPLATE 2 (Sage Sidebar + Blush Header + Chevron Section Markers)
+   =================================================================== */
+.resume-a4[data-template="template-2"] {
+    padding: 0;
+    overflow: hidden;
+    position: relative;
+    background: #ffffff;
+    display: flex;
+    align-items: stretch;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+.resume-a4[data-template="template-2"] .t2-sidebar {
+    flex: 0 0 35%;
+    width: 35%;
+    background-color: #6a9d9e;
+    padding: 8mm 6mm 10mm 7mm;
+    color: #142a2e;
+    display: flex;
+    flex-direction: column;
+}
+.resume-a4[data-template="template-2"] .t2-photo-wrap {
+    width: 28mm;
+    height: 28mm;
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.85);
+    margin: 0 auto 5mm auto;
+    overflow: hidden;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+    background: rgba(255,255,255,0.2);
+    flex-shrink: 0;
+}
+.resume-a4[data-template="template-2"] .t2-photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.resume-a4[data-template="template-2"] .t2-photo-empty {
+    width: 100%;
+    height: 100%;
+    background: rgba(255,255,255,0.3);
+}
+.resume-a4[data-template="template-2"] .t2-side-sec {
+    margin-bottom: 4.5mm;
+}
+.resume-a4[data-template="template-2"] .t2-side-title {
+    font-size: 10pt;
+    font-weight: 700;
+    color: #12282c;
+    margin-bottom: 2mm;
+}
+.resume-a4[data-template="template-2"] .t2-contact-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 2mm;
+    font-size: 8pt;
+    color: #173338;
+    margin-bottom: 1.8mm;
+    line-height: 1.32;
+    word-break: break-word;
+}
+.resume-a4[data-template="template-2"] .t2-contact-icon {
+    flex-shrink: 0;
+    width: 3.5mm;
+    height: 3.5mm;
+    margin-top: 0.3mm;
+    color: #12282c;
+}
+.resume-a4[data-template="template-2"] .t2-contact-row a {
+    color: #12282c;
+    text-decoration: underline;
+}
+.resume-a4[data-template="template-2"] .t2-side-text {
+    font-size: 8pt;
+    color: #173338;
+    line-height: 1.38;
+    white-space: pre-wrap;
+}
+.resume-a4[data-template="template-2"] .t2-side-list {
+    margin: 0;
+    padding-left: 4mm;
+    list-style-type: disc;
+}
+.resume-a4[data-template="template-2"] .t2-side-list li {
+    font-size: 8pt;
+    color: #173338;
+    margin-bottom: 0.8mm;
+}
+.resume-a4[data-template="template-2"] .t2-main {
+    flex: 1 1 65%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+}
+.resume-a4[data-template="template-2"] .t2-header {
+    background-color: #ebcbbc;
+    padding: 7mm 8mm 6mm 8mm;
+    min-height: 25mm;
+}
+.resume-a4[data-template="template-2"] .t2-name {
+    font-size: 20pt;
+    font-weight: 800;
+    color: #111827;
+    line-height: 1.1;
+    margin: 0;
+}
+.resume-a4[data-template="template-2"] .t2-headline {
+    font-size: 10pt;
+    font-weight: 500;
+    color: #374151;
+    margin-top: 1mm;
+}
+.resume-a4[data-template="template-2"] .t2-body {
+    padding: 6mm 8mm 8mm 8mm;
+    flex: 1;
+}
+.resume-a4[data-template="template-2"] .t2-sec {
+    margin-bottom: 4.5mm;
+    break-inside: avoid;
+}
+.resume-a4[data-template="template-2"] .t2-sec-head {
+    display: flex;
+    align-items: center;
+    gap: 1.8mm;
+    margin-bottom: 2mm;
+}
+.resume-a4[data-template="template-2"] .t2-sec-chevron {
+    color: #6a9d9e;
+    font-weight: 800;
+    font-size: 11pt;
+    line-height: 1;
+}
+.resume-a4[data-template="template-2"] .t2-sec-title {
+    font-size: 10.5pt;
+    font-weight: 700;
+    color: #111827;
+    line-height: 1;
+    margin: 0;
+}
+.resume-a4[data-template="template-2"] .t2-item {
+    margin-bottom: 3mm;
+    break-inside: avoid;
+}
+.resume-a4[data-template="template-2"] .t2-item-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 2mm;
+}
+.resume-a4[data-template="template-2"] .t2-item-title {
+    font-size: 9.5pt;
+    font-weight: 700;
+    color: #111827;
+}
+.resume-a4[data-template="template-2"] .t2-item-meta {
+    font-size: 8pt;
+    color: #4b5563;
+    white-space: nowrap;
+}
+.resume-a4[data-template="template-2"] .t2-item-sub {
+    font-size: 8.5pt;
+    color: #374151;
+    margin-top: 0.4mm;
+}
+.resume-a4[data-template="template-2"] .t2-item-body {
+    font-size: 8.5pt;
+    color: #374151;
+    line-height: 1.38;
+    margin-top: 0.8mm;
+    white-space: pre-wrap;
+}
+.resume-a4[data-template="template-2"] .t2-link {
+    font-size: 8pt;
+    margin-top: 0.4mm;
+    word-break: break-all;
+}
+.resume-a4[data-template="template-2"] .t2-link a {
+    color: #1d4ed8;
+    text-decoration: none;
+}
+.resume-a4[data-template="template-2"] .t2-sig {
+    margin-top: 4mm;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    break-inside: avoid;
+}
+.resume-a4[data-template="template-2"] .t2-sig img {
+    max-height: 14mm;
+    max-width: 48mm;
+    object-fit: contain;
+}
+.resume-a4[data-template="template-2"] .t2-sig-line {
+    font-size: 7.5pt;
+    color: #6b7280;
+    border-top: 1px solid #cbd5e1;
+    margin-top: 1mm;
+    padding-top: 0.5mm;
+    width: 45mm;
+    text-align: center;
+}
+
+/* ===================================================================
+   TEMPLATE 3 (Royal Blue Geometric Curved Header + Two-Column Layout)
+   =================================================================== */
+.resume-a4[data-template="template-3"] {
+    padding: 0;
+    overflow: hidden;
+    position: relative;
+    background: #ffffff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+.resume-a4[data-template="template-3"] .t3-header {
+    position: relative;
+    background: linear-gradient(135deg, #0071bd 0%, #005a9c 100%);
+    padding: 8mm 10mm 8mm 10mm;
+    border-bottom-right-radius: 46px;
+    display: flex;
+    align-items: center;
+    gap: 6mm;
+    overflow: hidden;
+    min-height: 30mm;
+}
+.resume-a4[data-template="template-3"] .t3-header-pattern {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+        repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.08) 0, rgba(255, 255, 255, 0.08) 1.5px, transparent 1.5px, transparent 18px),
+        repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.08) 0, rgba(255, 255, 255, 0.08) 1.5px, transparent 1.5px, transparent 18px);
+}
+.resume-a4[data-template="template-3"] .t3-photo-wrap {
+    width: 25mm;
+    height: 25mm;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.2);
+    border: 1.5px solid rgba(255, 255, 255, 0.45);
+    flex-shrink: 0;
+    overflow: hidden;
+    position: relative;
+    z-index: 1;
+}
+.resume-a4[data-template="template-3"] .t3-photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.resume-a4[data-template="template-3"] .t3-photo-empty {
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.2);
+}
+.resume-a4[data-template="template-3"] .t3-header-text {
+    position: relative;
+    z-index: 1;
+    color: #ffffff;
+}
+.resume-a4[data-template="template-3"] .t3-name {
+    font-size: 20pt;
+    font-weight: 800;
+    color: #ffffff;
+    line-height: 1.1;
+    letter-spacing: 0.3px;
+    margin: 0;
+}
+.resume-a4[data-template="template-3"] .t3-headline {
+    font-size: 10.5pt;
+    color: rgba(255, 255, 255, 0.95);
+    margin-top: 1mm;
+    font-weight: 500;
+}
+.resume-a4[data-template="template-3"] .t3-body {
+    display: flex;
+    gap: 7mm;
+    padding: 6mm 10mm 8mm 10mm;
+    background: #ffffff;
+}
+.resume-a4[data-template="template-3"] .t3-col-left {
+    flex: 1 1 56%;
+    min-width: 0;
+}
+.resume-a4[data-template="template-3"] .t3-col-right {
+    flex: 0 0 40%;
+    width: 40%;
+}
+.resume-a4[data-template="template-3"] .t3-sec {
+    margin-bottom: 4.5mm;
+    break-inside: avoid;
+}
+.resume-a4[data-template="template-3"] .t3-sec-title {
+    font-size: 10pt;
+    font-weight: 800;
+    color: #111827;
+    margin-bottom: 2mm;
+}
+.resume-a4[data-template="template-3"] .t3-contact-row {
+    display: flex;
+    align-items: center;
+    gap: 2.2mm;
+    font-size: 8.5pt;
+    color: #374151;
+    margin-bottom: 2mm;
+    line-height: 1.3;
+    word-break: break-word;
+}
+.resume-a4[data-template="template-3"] .t3-icon-badge {
+    width: 5mm;
+    height: 5mm;
+    border-radius: 50%;
+    background: #0071bd;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.resume-a4[data-template="template-3"] .t3-icon-badge svg {
+    width: 2.8mm;
+    height: 2.8mm;
+}
+.resume-a4[data-template="template-3"] .t3-contact-row a {
+    color: #0071bd;
+    text-decoration: none;
+}
+.resume-a4[data-template="template-3"] .t3-text {
+    font-size: 8.5pt;
+    color: #374151;
+    line-height: 1.4;
+    white-space: pre-wrap;
+}
+.resume-a4[data-template="template-3"] .t3-list {
+    margin: 0;
+    padding-left: 4.5mm;
+    list-style-type: disc;
+}
+.resume-a4[data-template="template-3"] .t3-list li {
+    font-size: 8.5pt;
+    color: #374151;
+    margin-bottom: 0.8mm;
+}
+.resume-a4[data-template="template-3"] .t3-item {
+    margin-bottom: 3.5mm;
+    break-inside: avoid;
+}
+.resume-a4[data-template="template-3"] .t3-item-title {
+    font-size: 9.5pt;
+    font-weight: 700;
+    color: #111827;
+}
+.resume-a4[data-template="template-3"] .t3-item-meta {
+    font-size: 8pt;
+    color: #4b5563;
+    margin-top: 0.4mm;
+}
+.resume-a4[data-template="template-3"] .t3-item-sub {
+    font-size: 8.5pt;
+    color: #374151;
+    margin-top: 0.4mm;
+}
+.resume-a4[data-template="template-3"] .t3-item-body {
+    font-size: 8.5pt;
+    color: #374151;
+    line-height: 1.38;
+    margin-top: 0.8mm;
+    white-space: pre-wrap;
+}
+.resume-a4[data-template="template-3"] .t3-link {
+    font-size: 8pt;
+    margin-top: 0.4mm;
+    word-break: break-all;
+}
+.resume-a4[data-template="template-3"] .t3-link a {
+    color: #0071bd;
+    text-decoration: none;
+}
+.resume-a4[data-template="template-3"] .t3-sig {
+    margin-top: 4mm;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    break-inside: avoid;
+}
+.resume-a4[data-template="template-3"] .t3-sig img {
+    max-height: 14mm;
+    max-width: 48mm;
+    object-fit: contain;
+}
+.resume-a4[data-template="template-3"] .t3-sig-line {
+    font-size: 7.5pt;
+    color: #6b7280;
+    border-top: 1px solid #cbd5e1;
+    margin-top: 1mm;
+    padding-top: 0.5mm;
+    width: 45mm;
+    text-align: center;
+}
+
+/* Print Handling */
+@media print {
+    body * { visibility: hidden !important; }
+    body > div.flex.h-screen, body > div[id="toastContainer"], body > aside, body > header, body > nav { display: none !important; }
+    #resumePreviewModal, #resumePreviewModal * { visibility: visible !important; }
+    #resumePreviewModal { position: static !important; background: #fff !important; padding: 0 !important; overflow: visible !important; }
+    #resumePreviewModal > div { border: 0 !important; background: #fff !important; box-shadow: none !important; max-width: none !important; margin: 0 !important; padding: 0 !important; }
+    #resumePreviewModal > div > div:first-child { display: none !important; }
+    #resumeTemplatePickerWrap { display: none !important; }
+    #resumePreviewModal > div > div:last-child { background: #fff !important; padding: 0 !important; overflow: visible !important; }
+    #resumePreviewBody { background: #fff !important; padding: 0 !important; }
+    .resume-a4 {
+        width: 210mm !important;
+        min-height: 297mm !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 auto !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+    @page {
+        size: A4;
+        margin: 0;
+    }
+}

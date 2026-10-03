@@ -1,4 +1,4 @@
-let mockOpportunities = [];
+﻿let mockOpportunities = [];
 let savedInterestedJobs = [];
 let waitlistedJobs = [];
 let currentSwipeIndex = 0;
@@ -127,6 +127,9 @@ const resumeState = {
     profilePictureName: "",
     /* CareerPulse profile picture, used only as a fallback preview. */
     careerPulseAvatar: "",
+    /* Which A4 template the preview renders. Presentation only: it is never
+       persisted and never alters resume data. */
+    template: "template-1",
     /* section -> record id being edited ("" = creating a new one) */
     editing: {},
     /* pending, unsaved values for the simple item lists */
@@ -408,85 +411,589 @@ function rvPeriod(start, end, ongoingLabel) {
     return from || to;
 }
 
-function rvItem(title, meta, body) {
-    return `<div class="rv-item">
-        <div class="rv-row">
-            <span class="rv-strong">${escapeHtml(title)}</span>
-            ${meta ? `<span class="rv-meta">${escapeHtml(meta)}</span>` : ""}
-        </div>
-        ${body ? `<div class="rv-body">${escapeHtml(body)}</div>` : ""}
-    </div>`;
-}
-
-function rvSection(title, inner) {
-    if (!inner) return "";
-    return `<section class="rv-section">
-        <h2 class="rv-title">${escapeHtml(title)}</h2>
-        ${inner}
-    </section>`;
-}
-
 function rvChips(values) {
     const list = (values || []).filter(v => String(v || "").trim());
     if (!list.length) return "";
     return `<div class="rv-chips">${list.map(v => `<span class="rv-chip">${escapeHtml(v)}</span>`).join("")}</div>`;
 }
 
+/* ---------- resume templates ----------
+
+   All three templates read ONE normalized model built by
+   resumePreviewModel(). A template only decides layout structure, header
+   treatment and visual style, so switching templates can never add, alter or
+   drop resume data. Presentation lives in resumeState.template and is never
+   persisted. */
+
+const RESUME_TEMPLATES = [
+    {
+        id: "template-1",
+        label: "Template 1",
+        tagline: "Warm Terracotta Header",
+        description: "Modern professional design featuring an angled terracotta banner, circular photo, and balanced two-column layout.",
+        preview: "template-1.png"
+    },
+    {
+        id: "template-2",
+        label: "Template 2",
+        tagline: "Sage Sidebar & Blush Accent",
+        description: "Editorial two-tone layout with a full-height sage sidebar, soft blush header, and chevron section markers.",
+        preview: "template-2.png"
+    },
+    {
+        id: "template-3",
+        label: "Template 3",
+        tagline: "Royal Blue Geometric Curve",
+        description: "Vibrant modern layout with royal blue curved banner, geometric pattern motifs, and circular icon badges.",
+        preview: "template-3.png"
+    }
+];
+
+const RESUME_TEMPLATE_IDS = RESUME_TEMPLATES.map(function (t) { return t.id; });
+const RESUME_DEFAULT_TEMPLATE = "template-1";
+
+const RESUME_SECTION_TITLES = {
+    summary: "Summary",
+    experience: "Experience",
+    education: "Education",
+    skills: "Skills",
+    projects: "Projects",
+    publications: "Publications",
+    awards: "Awards",
+    activities: "Activities",
+    languages: "Languages",
+    references: "References",
+    hobbies: "Hobbies",
+    additional: "Additional Information"
+};
+
+const RESUME_ICONS = {
+    phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="rv-svg-icon"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>',
+    mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="rv-svg-icon"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>',
+    pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="rv-svg-icon"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>',
+    globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="rv-svg-icon"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>',
+    calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="rv-svg-icon"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>',
+    linkedin: '<svg viewBox="0 0 24 24" fill="currentColor" class="rv-svg-icon"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>',
+    github: '<svg viewBox="0 0 24 24" fill="currentColor" class="rv-svg-icon"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>'
+};
+
+function resumeTemplateById(id) {
+    return RESUME_TEMPLATES.find(function (t) { return t.id === id; })
+        || RESUME_TEMPLATES.find(function (t) { return t.id === RESUME_DEFAULT_TEMPLATE; });
+}
+
+/* Links stay real anchors so the exported PDF keeps them clickable. Only
+   http/https/mailto survive, so a stored value cannot inject a javascript: URL. */
+function rvSafeHref(url) {
+    const raw = String(url || "").trim();
+    if (!raw) return "";
+    const candidate = /^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : "https://" + raw;
+    if (!/^(https?:|mailto:)/i.test(candidate)) return "";
+    return escapeHtml(candidate);
+}
+
+function rvLinkHtml(link, className) {
+    const href = rvSafeHref(link);
+    if (!href) return "";
+    return '<div class="' + (className || "rv-link") + '"><a href="' + href + '" target="_blank" rel="noopener">' + escapeHtml(String(link).trim()) + '</a></div>';
+}
+
+function rvBulletListHtml(values, listClass) {
+    const list = (values || []).filter(v => String(v || "").trim());
+    if (!list.length) return "";
+    return '<ul class="' + listClass + '">' + list.map(v => '<li>' + escapeHtml(v) + '</li>').join("") + '</ul>';
+}
+
+/* The single normalized view model every template renders from. */
+function resumePreviewModel() {
+    const p = resumeState.profile || {};
+    const photo = String(p.profile_picture_display || resumeState.careerPulseAvatar || "").trim();
+    const signature = String(p.signature_display || "").trim();
+
+    const contact = [p.email, p.phone, p.city, p.state, p.country,
+        p.linkedin_url, p.github_url, p.website_url]
+        .map(v => String(v || "").trim()).filter(Boolean);
+
+    const items = {
+        education: (resumeState.education || []).map(e => ({
+            degree: e.course_degree || "",
+            school: e.school_university || "",
+            grade: e.grade_score || "",
+            start_date: e.start_date || "",
+            end_date: e.end_date || "",
+            currently_doing: !!e.currently_doing,
+            title: [e.course_degree, e.school_university]
+                .filter(x => String(x || "").trim()).join(" - "),
+            meta: rvPeriod(e.start_date, e.end_date, e.currently_doing ? "Present" : ""),
+            body: e.grade_score ? "Grade: " + e.grade_score : ""
+        })),
+        experience: (resumeState.experience || []).map(e => ({
+            company: e.company_name || "",
+            job_title: e.job_title || "",
+            employment_type: e.employment_type || "",
+            start_date: e.start_date || "",
+            end_date: e.end_date || "",
+            currently_work_here: !!e.currently_work_here,
+            title: [e.job_title, e.company_name]
+                .filter(x => String(x || "").trim()).join(" at "),
+            meta: rvPeriod(e.start_date, e.end_date, e.currently_work_here ? "Present" : ""),
+            body: e.details || "",
+            tag: String(e.employment_type || "").trim() === "Internship" ? "Internship" : ""
+        })),
+        projects: (resumeState.projects || []).map(x => ({
+            title: x.title || "", meta: "", body: x.details || "", link: x.link || ""
+        })),
+        publications: (resumeState.publications || []).map(x => ({
+            title: x.title || "", meta: "", body: x.details || "", link: x.link || ""
+        })),
+        references: (resumeState.references || []).map(r => ({
+            name: r.referee_name || "",
+            job_title: r.job_title || "",
+            company: r.company_name || "",
+            email: r.email || "",
+            phone: r.phone || "",
+            title: r.referee_name || "",
+            meta: "",
+            body: [r.job_title, r.company_name, r.email, r.phone].filter(Boolean).join(" | ")
+        }))
+    };
+
+    return {
+        profile: p,
+        photo: photo,
+        signature: signature,
+        contact: contact,
+        items: items,
+        lists: {
+            skills: (resumeState.skills || []),
+            awards: (resumeState.awards || []),
+            activities: (resumeState.activities || []),
+            languages: (resumeState.languages || []),
+            hobbies: (resumeState.hobbies || [])
+        },
+        summary: String(p.summary || "").trim(),
+        additional: String(p.additional_information || "").trim()
+    };
+}
+
+/* ---------- Template 1 (Warm Terracotta Header + Two Columns) ---------- */
+
+function renderTemplate1(model) {
+    const p = model.profile || {};
+    const name = escapeHtml(p.name || "");
+    const headline = escapeHtml(p.headline || "");
+    const photo = model.photo
+        ? '<div class="t1-photo-wrap"><img class="t1-photo" src="' + escapeHtml(model.photo) + '" alt=""></div>'
+        : '<div class="t1-photo-wrap"><div class="t1-photo-empty"></div></div>';
+
+    const header = '<header class="t1-header-container">' +
+        '<div class="t1-header">' +
+            '<div class="t1-header-text">' +
+                '<h1 class="t1-name">' + name + '</h1>' +
+                (headline ? '<div class="t1-headline">' + headline + '</div>' : "") +
+            '</div>' +
+            photo +
+        '</div>' +
+    '</header>';
+
+    const contactRows = [];
+    if (p.phone) contactRows.push('<div class="t1-contact-item"><span class="t1-contact-label">Phone:</span> ' + escapeHtml(p.phone) + '</div>');
+    if (p.email) contactRows.push('<div class="t1-contact-item"><span class="t1-contact-label">Email:</span> ' + escapeHtml(p.email) + '</div>');
+    const loc = [p.address, p.city, p.state, p.pincode, p.country].filter(Boolean).join(", ");
+    if (loc) contactRows.push('<div class="t1-contact-item"><span class="t1-contact-label">Location:</span> ' + escapeHtml(loc) + '</div>');
+    if (p.website_url) contactRows.push('<div class="t1-contact-item"><span class="t1-contact-label">Website:</span> <a href="' + rvSafeHref(p.website_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.website_url) + '</a></div>');
+    if (p.date_of_birth) contactRows.push('<div class="t1-contact-item"><span class="t1-contact-label">Birthdate:</span> ' + escapeHtml(rvDate(p.date_of_birth) || p.date_of_birth) + '</div>');
+    if (p.linkedin_url) contactRows.push('<div class="t1-contact-item"><span class="t1-contact-label">LinkedIn:</span> <a href="' + rvSafeHref(p.linkedin_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.linkedin_url) + '</a></div>');
+    if (p.github_url) contactRows.push('<div class="t1-contact-item"><span class="t1-contact-label">GitHub:</span> <a href="' + rvSafeHref(p.github_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.github_url) + '</a></div>');
+
+    let leftHtml = "";
+    if (contactRows.length) {
+        leftHtml += '<section class="t1-sec"><h2 class="t1-sec-title">Contact Details</h2><div class="t1-contact-list">' + contactRows.join("") + '</div></section>';
+    }
+    if (model.summary) {
+        leftHtml += '<section class="t1-sec"><h2 class="t1-sec-title">Summary</h2><div class="t1-text">' + escapeHtml(model.summary) + '</div></section>';
+    }
+    const skillsHtml = rvBulletListHtml(model.lists.skills, "t1-list");
+    if (skillsHtml) {
+        leftHtml += '<section class="t1-sec"><h2 class="t1-sec-title">Skills</h2>' + skillsHtml + '</section>';
+    }
+    const langHtml = rvBulletListHtml(model.lists.languages, "t1-list");
+    if (langHtml) {
+        leftHtml += '<section class="t1-sec"><h2 class="t1-sec-title">Languages:</h2>' + langHtml + '</section>';
+    }
+    const actList = (model.lists.activities || []).filter(v => String(v || "").trim());
+    if (actList.length) {
+        leftHtml += '<section class="t1-sec"><h2 class="t1-sec-title">Activities</h2><div class="t1-text">' + escapeHtml(actList.join("\n\n")) + '</div></section>';
+    }
+    const awardList = (model.lists.awards || []).filter(v => String(v || "").trim());
+    if (awardList.length) {
+        leftHtml += '<section class="t1-sec"><h2 class="t1-sec-title">Award</h2><div class="t1-text">' + escapeHtml(awardList.join("\n\n")) + '</div></section>';
+    }
+
+    let rightHtml = "";
+    const exps = model.items.experience || [];
+    if (exps.length) {
+        const itemsHtml = exps.map(e => '<div class="t1-item">' +
+            '<div class="t1-item-title">' + escapeHtml(e.company || e.title) + '</div>' +
+            (e.meta ? '<div class="t1-item-meta">' + escapeHtml(e.meta) + '</div>' : "") +
+            (e.job_title ? '<div class="t1-item-role">' + escapeHtml(e.job_title) + '</div>' : "") +
+            (e.body ? '<div class="t1-item-body">' + escapeHtml(e.body) + '</div>' : "") +
+        '</div>').join("");
+        rightHtml += '<section class="t1-sec"><h2 class="t1-sec-title">Experience</h2>' + itemsHtml + '</section>';
+    }
+
+    const edus = model.items.education || [];
+    if (edus.length) {
+        const itemsHtml = edus.map(e => {
+            const head = [e.meta, e.school || e.title].filter(Boolean).join(" - ");
+            const sub = [e.degree, e.grade ? (String(e.grade).toUpperCase().includes("CGPA") || String(e.grade).toLowerCase().includes("grade") ? e.grade : "CGPA " + e.grade) : ""].filter(Boolean).join(" - ");
+            return '<div class="t1-item">' +
+                '<div class="t1-item-title">' + escapeHtml(head) + '</div>' +
+                (sub ? '<div class="t1-item-role">' + escapeHtml(sub) + '</div>' : "") +
+                (e.body && !sub ? '<div class="t1-item-body">' + escapeHtml(e.body) + '</div>' : "") +
+            '</div>';
+        }).join("");
+        rightHtml += '<section class="t1-sec"><h2 class="t1-sec-title">Education</h2>' + itemsHtml + '</section>';
+    }
+
+    const projs = model.items.projects || [];
+    if (projs.length) {
+        const itemsHtml = projs.map(x => '<div class="t1-item">' +
+            '<div class="t1-item-title">' + escapeHtml(x.title) + '</div>' +
+            (x.link ? rvLinkHtml(x.link, "t1-link") : "") +
+            (x.body ? '<div class="t1-item-body">' + escapeHtml(x.body) + '</div>' : "") +
+        '</div>').join("");
+        rightHtml += '<section class="t1-sec"><h2 class="t1-sec-title">Projects</h2>' + itemsHtml + '</section>';
+    }
+
+    const refs = model.items.references || [];
+    if (refs.length) {
+        const itemsHtml = refs.map(r => '<div class="t1-item">' +
+            '<div class="t1-item-title">' + escapeHtml(r.name || r.title) + '</div>' +
+            (r.email ? '<div class="t1-item-meta">' + escapeHtml(r.email) + '</div>' : "") +
+            (r.phone ? '<div class="t1-item-meta">' + escapeHtml(r.phone) + '</div>' : "") +
+            (!r.email && !r.phone && r.body ? '<div class="t1-item-body">' + escapeHtml(r.body) + '</div>' : "") +
+        '</div>').join("");
+        rightHtml += '<section class="t1-sec"><h2 class="t1-sec-title">Reference</h2>' + itemsHtml + '</section>';
+    }
+
+    if (model.additional) {
+        rightHtml += '<section class="t1-sec"><h2 class="t1-sec-title">Additional Information</h2><div class="t1-item-body">' + escapeHtml(model.additional) + '</div></section>';
+    }
+
+    const sig = model.signature
+        ? '<div class="t1-sig"><img src="' + escapeHtml(model.signature) + '" alt="Signature"><div class="t1-sig-line">Authorized Signature</div></div>'
+        : "";
+
+    return header +
+        '<div class="t1-body">' +
+            '<div class="t1-col-left">' + leftHtml + '</div>' +
+            '<div class="t1-col-right">' + rightHtml + sig + '</div>' +
+        '</div>';
+}
+
+/* ---------- Template 2 (Sage Sidebar + Blush Header + Chevrons) ---------- */
+
+function renderTemplate2(model) {
+    const p = model.profile || {};
+    const name = escapeHtml(p.name || "");
+    const headline = escapeHtml(p.headline || "");
+    const photo = model.photo
+        ? '<div class="t2-photo-wrap"><img class="t2-photo" src="' + escapeHtml(model.photo) + '" alt=""></div>'
+        : '<div class="t2-photo-wrap"><div class="t2-photo-empty"></div></div>';
+
+    const contactRows = [];
+    if (p.phone) contactRows.push('<div class="t2-contact-row"><span class="t2-contact-icon">' + RESUME_ICONS.phone + '</span><span>' + escapeHtml(p.phone) + '</span></div>');
+    if (p.email) contactRows.push('<div class="t2-contact-row"><span class="t2-contact-icon">' + RESUME_ICONS.mail + '</span><span>' + escapeHtml(p.email) + '</span></div>');
+    const loc = [p.address, p.city, p.state, p.pincode, p.country].filter(Boolean).join(", ");
+    if (loc) contactRows.push('<div class="t2-contact-row"><span class="t2-contact-icon">' + RESUME_ICONS.pin + '</span><span>' + escapeHtml(loc) + '</span></div>');
+    if (p.website_url) contactRows.push('<div class="t2-contact-row"><span class="t2-contact-icon">' + RESUME_ICONS.globe + '</span><a href="' + rvSafeHref(p.website_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.website_url) + '</a></div>');
+    if (p.date_of_birth) contactRows.push('<div class="t2-contact-row"><span class="t2-contact-icon">' + RESUME_ICONS.calendar + '</span><span>' + escapeHtml(rvDate(p.date_of_birth) || p.date_of_birth) + '</span></div>');
+    if (p.linkedin_url) contactRows.push('<div class="t2-contact-row"><span class="t2-contact-icon">' + RESUME_ICONS.linkedin + '</span><a href="' + rvSafeHref(p.linkedin_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.linkedin_url) + '</a></div>');
+    if (p.github_url) contactRows.push('<div class="t2-contact-row"><span class="t2-contact-icon">' + RESUME_ICONS.github + '</span><a href="' + rvSafeHref(p.github_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.github_url) + '</a></div>');
+
+    let sideHtml = photo;
+    if (contactRows.length) {
+        sideHtml += '<section class="t2-side-sec"><h2 class="t2-side-title">Contact Details</h2><div>' + contactRows.join("") + '</div></section>';
+    }
+    if (model.summary) {
+        sideHtml += '<section class="t2-side-sec"><h2 class="t2-side-title">Summary</h2><div class="t2-side-text">' + escapeHtml(model.summary) + '</div></section>';
+    }
+    const skillsHtml = rvBulletListHtml(model.lists.skills, "t2-side-list");
+    if (skillsHtml) {
+        sideHtml += '<section class="t2-side-sec"><h2 class="t2-side-title">Skills</h2>' + skillsHtml + '</section>';
+    }
+    const langHtml = rvBulletListHtml(model.lists.languages, "t2-side-list");
+    if (langHtml) {
+        sideHtml += '<section class="t2-side-sec"><h2 class="t2-side-title">Languages</h2>' + langHtml + '</section>';
+    }
+    const actList = (model.lists.activities || []).filter(v => String(v || "").trim());
+    if (actList.length) {
+        sideHtml += '<section class="t2-side-sec"><h2 class="t2-side-title">Activities</h2><div class="t2-side-text">' + escapeHtml(actList.join(", ")) + '</div></section>';
+    }
+    const hobList = (model.lists.hobbies || []).filter(v => String(v || "").trim());
+    if (hobList.length) {
+        sideHtml += '<section class="t2-side-sec"><h2 class="t2-side-title">Hobbies</h2><div class="t2-side-text">' + escapeHtml(hobList.join(", ")) + '</div></section>';
+    }
+
+    const header = '<header class="t2-header">' +
+        '<h1 class="t2-name">' + name + '</h1>' +
+        (headline ? '<div class="t2-headline">' + headline + '</div>' : "") +
+    '</header>';
+
+    function t2Section(title, inner) {
+        if (!inner) return "";
+        return '<section class="t2-sec">' +
+            '<div class="t2-sec-head"><span class="t2-sec-chevron">&gt;</span><h2 class="t2-sec-title">' + escapeHtml(title) + '</h2></div>' +
+            inner +
+        '</section>';
+    }
+
+    let mainBody = "";
+    const edus = model.items.education || [];
+    if (edus.length) {
+        const items = edus.map(e => '<div class="t2-item">' +
+            '<div class="t2-item-title">' + escapeHtml(e.school || e.title) + '</div>' +
+            (e.degree || e.grade ? '<div class="t2-item-sub">' + escapeHtml([e.degree, e.grade].filter(Boolean).join(" - ")) + '</div>' : "") +
+            (e.meta ? '<div class="t2-item-meta">' + escapeHtml(e.meta) + '</div>' : "") +
+            (e.body && !e.grade ? '<div class="t2-item-body">' + escapeHtml(e.body) + '</div>' : "") +
+        '</div>').join("");
+        mainBody += t2Section("Education", items);
+    }
+
+    const exps = model.items.experience || [];
+    if (exps.length) {
+        const items = exps.map(e => '<div class="t2-item">' +
+            '<div class="t2-item-head">' +
+                '<span class="t2-item-title">' + escapeHtml(e.company || e.title) + '</span>' +
+                (e.meta ? '<span class="t2-item-meta">' + escapeHtml(e.meta) + '</span>' : "") +
+            '</div>' +
+            (e.job_title ? '<div class="t2-item-sub">' + escapeHtml(e.job_title) + (e.tag ? ' - ' + escapeHtml(e.tag.toLowerCase()) : "") + '</div>' : "") +
+            (e.body ? '<div class="t2-item-body">' + escapeHtml(e.body) + '</div>' : "") +
+        '</div>').join("");
+        mainBody += t2Section("Experience", items);
+    }
+
+    const projs = model.items.projects || [];
+    if (projs.length) {
+        const items = projs.map(x => '<div class="t2-item">' +
+            '<div class="t2-item-title">' + escapeHtml(x.title) + '</div>' +
+            (x.link ? rvLinkHtml(x.link, "t2-link") : "") +
+            (x.body ? '<div class="t2-item-body">' + escapeHtml(x.body) + '</div>' : "") +
+        '</div>').join("");
+        mainBody += t2Section("Projects", items);
+    }
+
+    const pubs = model.items.publications || [];
+    if (pubs.length) {
+        const items = pubs.map(x => '<div class="t2-item">' +
+            '<div class="t2-item-title">' + escapeHtml(x.title) + '</div>' +
+            (x.link ? rvLinkHtml(x.link, "t2-link") : "") +
+            (x.body ? '<div class="t2-item-body">' + escapeHtml(x.body) + '</div>' : "") +
+        '</div>').join("");
+        mainBody += t2Section("Publications", items);
+    }
+
+    const refs = model.items.references || [];
+    if (refs.length) {
+        const items = refs.map(r => '<div class="t2-item">' +
+            '<div class="t2-item-title">' + escapeHtml(r.name || r.title) + '</div>' +
+            (r.email ? '<div class="t2-item-meta">' + escapeHtml(r.email) + '</div>' : "") +
+            (r.phone ? '<div class="t2-item-meta">' + escapeHtml(r.phone) + '</div>' : "") +
+            (!r.email && !r.phone && r.body ? '<div class="t2-item-body">' + escapeHtml(r.body) + '</div>' : "") +
+        '</div>').join("");
+        mainBody += t2Section("Reference", items);
+    }
+
+    const awardList2 = (model.lists.awards || []).filter(v => String(v || "").trim());
+    if (awardList2.length) {
+        mainBody += t2Section("Awards", '<div class="t2-item-body">' + escapeHtml(awardList2.join("\n\n")) + '</div>');
+    }
+
+    if (model.additional) {
+        mainBody += t2Section("Additional Information", '<div class="t2-item-body">' + escapeHtml(model.additional) + '</div>');
+    }
+
+    const sig = model.signature
+        ? '<div class="t2-sig"><img src="' + escapeHtml(model.signature) + '" alt="Signature"><div class="t2-sig-line">Authorized Signature</div></div>'
+        : "";
+
+    return '<aside class="t2-sidebar">' + sideHtml + '</aside>' +
+        '<main class="t2-main">' +
+            header +
+            '<div class="t2-body">' + mainBody + sig + '</div>' +
+        '</main>';
+}
+
+/* ---------- Template 3 (Royal Blue Geometric Curve + Two Columns) ---------- */
+
+function renderTemplate3(model) {
+    const p = model.profile || {};
+    const name = escapeHtml(p.name || "");
+    const headline = escapeHtml(p.headline || "");
+    const photo = model.photo
+        ? '<div class="t3-photo-wrap"><img class="t3-photo" src="' + escapeHtml(model.photo) + '" alt=""></div>'
+        : '<div class="t3-photo-wrap"><div class="t3-photo-empty"></div></div>';
+
+    const header = '<header class="t3-header">' +
+        '<div class="t3-header-pattern"></div>' +
+        photo +
+        '<div class="t3-header-text">' +
+            '<h1 class="t3-name">' + name + '</h1>' +
+            (headline ? '<div class="t3-headline">' + headline + '</div>' : "") +
+        '</div>' +
+    '</header>';
+
+    let leftHtml = "";
+    const edus = model.items.education || [];
+    if (edus.length) {
+        const items = edus.map(e => '<div class="t3-item">' +
+            '<div class="t3-item-title">' + escapeHtml(e.school || e.title) + '</div>' +
+            (e.meta ? '<div class="t3-item-meta">' + escapeHtml(e.meta) + '</div>' : "") +
+            (e.degree || e.grade ? '<div class="t3-item-sub">' + escapeHtml([e.degree, e.grade ? (String(e.grade).toUpperCase().includes("CGPA") ? e.grade : "CGPA " + e.grade) : ""].filter(Boolean).join(" - ")) + '</div>' : "") +
+            (e.body && !e.grade ? '<div class="t3-item-body">' + escapeHtml(e.body) + '</div>' : "") +
+        '</div>').join("");
+        leftHtml += '<section class="t3-sec"><h2 class="t3-sec-title">Education</h2>' + items + '</section>';
+    }
+
+    const exps = model.items.experience || [];
+    if (exps.length) {
+        const items = exps.map(e => '<div class="t3-item">' +
+            '<div class="t3-item-title">' + escapeHtml(e.company || e.title) + '</div>' +
+            (e.meta ? '<div class="t3-item-meta">' + escapeHtml(e.meta) + '</div>' : "") +
+            (e.job_title ? '<div class="t3-item-sub">' + escapeHtml(e.job_title) + '</div>' : "") +
+            (e.body ? '<div class="t3-item-body">' + escapeHtml(e.body) + '</div>' : "") +
+        '</div>').join("");
+        leftHtml += '<section class="t3-sec"><h2 class="t3-sec-title">Experience</h2>' + items + '</section>';
+    }
+
+    const projs = model.items.projects || [];
+    if (projs.length) {
+        const items = projs.map(x => '<div class="t3-item">' +
+            '<div class="t3-item-title">' + escapeHtml(x.title) + '</div>' +
+            (x.link ? rvLinkHtml(x.link, "t3-link") : "") +
+            (x.body ? '<div class="t3-item-body">' + escapeHtml(x.body) + '</div>' : "") +
+        '</div>').join("");
+        leftHtml += '<section class="t3-sec"><h2 class="t3-sec-title">Projects</h2>' + items + '</section>';
+    }
+
+    const refs = model.items.references || [];
+    if (refs.length) {
+        const items = refs.map(r => '<div class="t3-item">' +
+            '<div class="t3-item-title">' + escapeHtml(r.name || r.title) + '</div>' +
+            (r.email ? '<div class="t3-item-meta">' + escapeHtml(r.email) + '</div>' : "") +
+            (r.phone ? '<div class="t3-item-meta">' + escapeHtml(r.phone) + '</div>' : "") +
+            (!r.email && !r.phone && r.body ? '<div class="t3-item-body">' + escapeHtml(r.body) + '</div>' : "") +
+        '</div>').join("");
+        leftHtml += '<section class="t3-sec"><h2 class="t3-sec-title">Reference</h2>' + items + '</section>';
+    }
+
+    const pubs = model.items.publications || [];
+    if (pubs.length) {
+        const items = pubs.map(x => '<div class="t3-item">' +
+            '<div class="t3-item-title">' + escapeHtml(x.title) + '</div>' +
+            (x.link ? rvLinkHtml(x.link, "t3-link") : "") +
+            (x.body ? '<div class="t3-item-body">' + escapeHtml(x.body) + '</div>' : "") +
+        '</div>').join("");
+        leftHtml += '<section class="t3-sec"><h2 class="t3-sec-title">Publications</h2>' + items + '</section>';
+    }
+
+    const contactRows = [];
+    if (p.phone) contactRows.push('<div class="t3-contact-row"><span class="t3-icon-badge">' + RESUME_ICONS.phone + '</span><span>' + escapeHtml(p.phone) + '</span></div>');
+    if (p.email) contactRows.push('<div class="t3-contact-row"><span class="t3-icon-badge">' + RESUME_ICONS.mail + '</span><span>' + escapeHtml(p.email) + '</span></div>');
+    const loc = [p.address, p.city, p.state, p.pincode, p.country].filter(Boolean).join(", ");
+    if (loc) contactRows.push('<div class="t3-contact-row"><span class="t3-icon-badge">' + RESUME_ICONS.pin + '</span><span>' + escapeHtml(loc) + '</span></div>');
+    if (p.website_url) contactRows.push('<div class="t3-contact-row"><span class="t3-icon-badge">' + RESUME_ICONS.globe + '</span><a href="' + rvSafeHref(p.website_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.website_url) + '</a></div>');
+    if (p.date_of_birth) contactRows.push('<div class="t3-contact-row"><span class="t3-icon-badge">' + RESUME_ICONS.calendar + '</span><span>' + escapeHtml(rvDate(p.date_of_birth) || p.date_of_birth) + '</span></div>');
+    if (p.linkedin_url) contactRows.push('<div class="t3-contact-row"><span class="t3-icon-badge">' + RESUME_ICONS.linkedin + '</span><a href="' + rvSafeHref(p.linkedin_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.linkedin_url) + '</a></div>');
+    if (p.github_url) contactRows.push('<div class="t3-contact-row"><span class="t3-icon-badge">' + RESUME_ICONS.github + '</span><a href="' + rvSafeHref(p.github_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.github_url) + '</a></div>');
+
+    let rightHtml = "";
+    if (contactRows.length) {
+        rightHtml += '<section class="t3-sec"><h2 class="t3-sec-title">Contact Details</h2><div>' + contactRows.join("") + '</div></section>';
+    }
+    if (model.summary) {
+        rightHtml += '<section class="t3-sec"><h2 class="t3-sec-title">Summary</h2><div class="t3-text">' + escapeHtml(model.summary) + '</div></section>';
+    }
+    const skillsHtml = rvBulletListHtml(model.lists.skills, "t3-list");
+    if (skillsHtml) {
+        rightHtml += '<section class="t3-sec"><h2 class="t3-sec-title">Skills</h2>' + skillsHtml + '</section>';
+    }
+    const langHtml = rvBulletListHtml(model.lists.languages, "t3-list");
+    if (langHtml) {
+        rightHtml += '<section class="t3-sec"><h2 class="t3-sec-title">Languages</h2>' + langHtml + '</section>';
+    }
+    const actList = (model.lists.activities || []).filter(v => String(v || "").trim());
+    if (actList.length) {
+        rightHtml += '<section class="t3-sec"><h2 class="t3-sec-title">Activities</h2><div class="t3-text">' + escapeHtml(actList.join("\n\n")) + '</div></section>';
+    }
+    const awardList3 = (model.lists.awards || []).filter(v => String(v || "").trim());
+    if (awardList3.length) {
+        rightHtml += '<section class="t3-sec"><h2 class="t3-sec-title">Awards</h2><div class="t3-text">' + escapeHtml(awardList3.join("\n\n")) + '</div></section>';
+    }
+    if (model.additional) {
+        rightHtml += '<section class="t3-sec"><h2 class="t3-sec-title">Additional Information</h2><div class="t3-text">' + escapeHtml(model.additional) + '</div></section>';
+    }
+
+    const sig = model.signature
+        ? '<div class="t3-sig"><img src="' + escapeHtml(model.signature) + '" alt="Signature"><div class="t3-sig-line">Authorized Signature</div></div>'
+        : "";
+
+    return header +
+        '<div class="t3-body">' +
+            '<div class="t3-col-left">' + leftHtml + '</div>' +
+            '<div class="t3-col-right">' + rightHtml + sig + '</div>' +
+        '</div>';
+}
+
+/* Template dispatcher: one model in, one A4 sheet out. */
+function renderTemplateBody(def, model) {
+    if (def && def.id === "template-2") {
+        return renderTemplate2(model);
+    }
+    if (def && def.id === "template-3") {
+        return renderTemplate3(model);
+    }
+    return renderTemplate1(model);
+}
+
+function renderResumeTemplatePicker() {
+    const host = document.getElementById("resumeTemplatePicker");
+    if (!host) return;
+    const current = resumeTemplateById(resumeState.template).id;
+    host.innerHTML = RESUME_TEMPLATES.map(function (t) {
+        const selected = t.id === current;
+        return `<button type="button" class="tpl-card" data-template="${escapeHtml(t.id)}"
+            aria-pressed="${selected ? "true" : "false"}"
+            title="${escapeHtml(t.description)}"
+            onclick="selectResumeTemplate('${escapeHtml(t.id)}')">
+            <span class="tpl-thumb" data-template="${escapeHtml(t.id)}">
+                <img src="/static/assets/templates/${escapeHtml(t.preview)}" alt="${escapeHtml(t.label)}" class="tpl-thumb-img">
+            </span>
+            <span class="tpl-card-body">
+                <span class="tpl-card-label">${escapeHtml(t.label)}</span>
+                <span class="tpl-card-tag">${escapeHtml(t.tagline)}</span>
+            </span>
+        </button>`;
+    }).join("");
+}
+
+/* Presentation-only switch. Reads resumeState, writes no resume field, and
+   calls no API, so the user's resume is untouched. */
+function selectResumeTemplate(id) {
+    if (RESUME_TEMPLATE_IDS.indexOf(id) === -1) return;
+    resumeState.template = id;
+    renderResumeTemplatePicker();
+    renderResumePreview();
+}
+
 function renderResumePreview() {
     const body = document.getElementById("resumePreviewBody");
     if (!body) return;
 
-    const p = resumeState.profile || {};
-    const photo = p.profile_picture_display || resumeState.careerPulseAvatar || "";
-
-    const contact = [p.email, p.phone, p.city, p.state, p.country, p.linkedin_url,
-        p.github_url, p.website_url]
-        .map(v => String(v || "").trim()).filter(Boolean);
-
-    const education = (resumeState.education || []).map(e =>
-        rvItem(`${e.course_degree || ""}${e.school_university ? " - " + e.school_university : ""}`.replace(/^ - /, "").replace(/ - $/, ""),
-            rvPeriod(e.start_date, e.end_date, e.currently_doing ? "Present" : ""),
-            e.grade_score ? `Grade: ${e.grade_score}` : "")).join("");
-
-    const experience = (resumeState.experience || []).map(e =>
-        rvItem(`${e.job_title || ""}${e.company_name ? " at " + e.company_name : ""}`,
-            rvPeriod(e.start_date, e.end_date, e.currently_work_here ? "Present" : ""),
-            e.details || "")).join("");
-
-    const projects = (resumeState.projects || []).map(x =>
-        rvItem(x.title || "", "", [x.details, x.link].filter(Boolean).join("\n"))).join("");
-
-    const publications = (resumeState.publications || []).map(x =>
-        rvItem(x.title || "", "", [x.details, x.link].filter(Boolean).join("\n"))).join("");
-
-    const references = (resumeState.references || []).map(r =>
-        rvItem(r.referee_name || "", "",
-            [r.job_title, r.company_name, r.email, r.phone].filter(Boolean).join(" | "))).join("");
-
-    body.innerHTML = `
-        <header class="rv-head">
-            ${photo ? `<img class="rv-photo" src="${escapeHtml(photo)}" alt="">` : ""}
-            <div style="min-width:0">
-                <h1 class="rv-name">${escapeHtml(p.name || "")}</h1>
-                ${p.headline ? `<div class="rv-role">${escapeHtml(p.headline)}</div>` : ""}
-                ${p.summary ? `<div class="rv-body">${escapeHtml(p.summary)}</div>` : ""}
-                ${contact.length ? `<div class="rv-contact">${contact.map(c => `<span>${escapeHtml(c)}</span>`).join("")}</div>` : ""}
-            </div>
-        </header>
-        ${rvSection("Summary", p.summary ? `<div class="rv-body">${escapeHtml(p.summary)}</div>` : "")}
-        ${rvSection("Experience", experience)}
-        ${rvSection("Education", education)}
-        ${rvSection("Skills", rvChips(resumeState.skills))}
-        ${rvSection("Projects", projects)}
-        ${rvSection("Publications", publications)}
-        ${rvSection("Awards", rvChips(resumeState.awards))}
-        ${rvSection("Activities", rvChips(resumeState.activities))}
-        ${rvSection("Hobbies", rvChips(resumeState.hobbies))}
-        ${rvSection("Languages", rvChips(resumeState.languages))}
-        ${rvSection("References", references)}
-        ${rvSection("Additional Information", p.additional_information ? `<div class="rv-body">${escapeHtml(p.additional_information)}</div>` : "")}
-        ${p.signature_display ? `<div class="rv-sig"><img src="${escapeHtml(p.signature_display)}" alt="Signature"></div>` : ""}
-    `;
+    const def = resumeTemplateById(resumeState.template);
+    body.dataset.template = def.id;
+    body.innerHTML = renderTemplateBody(def, resumePreviewModel());
 }
 
 function closeResumePreview() {
@@ -504,9 +1011,10 @@ async function buildResume() {
     if (btn) resumeSetBusy("resumeBuildBtn", true, "Build Resume");
     try {
         // Flush any open editable row (education/experience/references/etc).
+        // Only a section that is actively being edited needs a flush.
         const editing = Object.keys(resumeState.editing || {})
-            .filter(k => resumeState.editing[k] !== undefined);
-        if (editing.length) saveResumeEntry(editing[0]);
+            .filter(k => resumeState.editing[k]);
+        if (editing.length) await saveResumeEntry(editing[0]);
 
         // Persist any list sections the user edited but did not save.
         const dirty = Object.keys(resumeState.pendingItems || {})
@@ -514,11 +1022,17 @@ async function buildResume() {
                 !== JSON.stringify(resumeState[k] || []));
         for (const section of dirty) await saveResumeItemList(section);
 
-        await loadResume();
+        await loadResumeView(true);
+        renderResumeTemplatePicker();
         renderResumePreview();
         const modal = document.getElementById("resumePreviewModal");
-        if (modal) modal.classList.remove("hidden");
+        if (modal) {
+            modal.classList.remove("hidden");
+            // Let the browser paint before the user interacts with the sheet.
+            await new Promise(resolve => requestAnimationFrame(resolve));
+        }
     } catch (err) {
+        console.error("[CareerPulse] buildResume failed:", err);
         showToast(err.message || "Could not build the resume preview.");
     } finally {
         if (btn) resumeSetBusy("resumeBuildBtn", false, "Build Resume");
@@ -550,31 +1064,70 @@ function renderResumeImage(kind, displayUrl, storedPath) {
     const uploadBtn = document.getElementById("resumeProfilePicBtn");
     const nameEl = document.getElementById("resumeProfilePicName");
 
-    if (displayUrl) {
-        img.src = displayUrl;
-        img.classList.remove("hidden");
-        // A photo exists: the normal Upload control is replaced by a
-        // persistent file name plus Change / Remove actions.
+    // An <img> with no src renders an empty box, so only trust a signed URL
+    // that actually carries a value.
+    const usable = String(displayUrl || "").trim();
+    const stored = String(storedPath || "").trim();
+    const statusEl = document.getElementById("resumeProfilePicStatus");
+    // A photo is "owned by the resume" as soon as a stored path exists, even if
+    // its signed URL has not arrived yet. State 2 must not fall back to the
+    // CareerPulse avatar, or the user's own photo appears to vanish.
+    const hasResumePhoto = !!(usable || stored);
+
+    if (hasResumePhoto) {
+        // Change / Remove are driven by resume state, never by input.files.
         if (clearBtn) clearBtn.classList.remove("hidden");
         if (changeBtn) changeBtn.classList.remove("hidden");
         if (uploadBtn) uploadBtn.classList.add("hidden");
         if (nameEl) {
             const label = resumeState.profilePictureName
-                || resumePhotoNameFromPath(storedPath)
+                || resumePhotoNameFromPath(stored)
                 || "";
             nameEl.textContent = label ? label : "Photo uploaded";
             nameEl.title = label;
             nameEl.classList.remove("hidden");
         }
+
+        if (usable) {
+            // Signed URLs carry a bearer token, so log the shape of the URL
+            // rather than the URL itself.
+            img.onload = function () {
+                if (statusEl) statusEl.classList.add("hidden");
+                img.classList.remove("hidden");
+            };
+            img.onerror = function (event) {
+                // Once only: a dead signed URL must not loop.
+                img.onerror = null;
+                img.classList.add("hidden");
+                console.warn("[CareerPulse] resume photo failed to load",
+                    { status: img.naturalWidth + "x" + img.naturalHeight, event: event && event.type });
+                if (statusEl) {
+                    statusEl.textContent = "Photo could not be displayed. Use Change Photo to re-upload.";
+                    statusEl.classList.remove("hidden");
+                }
+            };
+            img.src = usable;
+            img.classList.remove("hidden");
+        } else {
+            // State 2: stored photo, signed URL not ready. Keep the row and the
+            // file name visible and say so, rather than showing the avatar.
+            img.removeAttribute("src");
+            img.onerror = null;
+            img.classList.add("hidden");
+            if (statusEl) {
+                statusEl.textContent = "Photo is loading…";
+                statusEl.classList.remove("hidden");
+            }
+        }
     } else {
-        // No resume photo: fall back to the CareerPulse profile picture if one
-        // exists, otherwise hide the preview and restore the Upload control.
+        // State 3: no resume photo at all -> CareerPulse avatar or empty state.
         const fallback = resumeState.careerPulseAvatar || "";
         if (fallback) {
             img.src = fallback;
             img.classList.remove("hidden");
         } else {
             img.removeAttribute("src");
+            img.onerror = null;
             img.classList.add("hidden");
         }
         if (clearBtn) clearBtn.classList.add("hidden");
@@ -584,10 +1137,12 @@ function renderResumeImage(kind, displayUrl, storedPath) {
             nameEl.textContent = "";
             nameEl.classList.add("hidden");
         }
+        if (statusEl) statusEl.classList.add("hidden");
     }
 }
 
-/* "Change Photo" re-opens the native file picker without a second upload path. */
+/* "Upload Picture" / "Change Photo" both open the one existing file picker.
+   The input itself is hidden and carries the onchange that runs the upload. */
 function resumeStartPhotoChange() {
     const input = document.getElementById("resumeProfilePicInput");
     if (input) input.click();
@@ -981,7 +1536,6 @@ async function saveResumeTextField(field) {
 
 async function uploadResumeImage(kind) {
     const inputId = kind === "signature" ? "resumeSignatureInput" : "resumeProfilePicInput";
-    const btnId = kind === "signature" ? "resumeSignatureBtn" : "resumeProfilePicBtn";
     const input = document.getElementById(inputId);
     if (!input || !input.files || !input.files[0]) {
         showToast("Choose an image first.");
@@ -1000,7 +1554,18 @@ async function uploadResumeImage(kind) {
         return;
     }
 
-    resumeSetBusy(btnId, true, kind === "signature" ? "Upload Signature" : "Upload Picture");
+    // Send busy state to whichever control is actually on screen: the Upload
+    // button is hidden once a photo exists, and Change Photo replaces it.
+    const changeBtnEl = document.getElementById("resumeProfilePicChangeBtn");
+    const busyOnChange = !!(changeBtnEl && !changeBtnEl.classList.contains("hidden"));
+    const btnId = kind === "signature"
+        ? "resumeSignatureBtn"
+        : (busyOnChange ? "resumeProfilePicChangeBtn" : "resumeProfilePicBtn");
+    const busyLabel = kind === "signature"
+        ? "Upload Signature"
+        : (busyOnChange ? "Change Photo" : "Upload Picture");
+
+    resumeSetBusy(btnId, true, busyLabel);
     try {
         const dataUrl = await new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -1014,12 +1579,16 @@ async function uploadResumeImage(kind) {
             body: JSON.stringify({ kind, data_url: dataUrl })
         });
 
-        // Store the path (round-trippable), render the signed URL.
+        // Store the path (round-trippable), render the signed URL. The
+        // *_display values are kept in step as well, because the A4 preview
+        // reads them and would otherwise keep showing the previous image.
         if (kind === "signature") {
             resumeState.profile.signature_url = data.path;
+            resumeState.profile.signature_display = data.display_url || null;
             renderResumeImage("signature", data.display_url, data.path);
         } else {
             resumeState.profile.profile_picture_url = data.path;
+            resumeState.profile.profile_picture_display = data.display_url || null;
             // Keep the name so the uploaded file stays identifiable after a
             // reload, when the stored path alone is all we have.
             resumeState.profilePictureName = file.name;
@@ -1030,8 +1599,10 @@ async function uploadResumeImage(kind) {
     } catch (err) {
         showToast(err.message || "Upload failed.");
     } finally {
+        // Clearing the input only resets the picker; the visible state is owned
+        // by resumeState, so this cannot make the photo disappear.
         input.value = "";
-        resumeSetBusy(btnId, false, kind === "signature" ? "Upload Signature" : "Upload Picture");
+        resumeSetBusy(btnId, false, busyLabel);
     }
 }
 
@@ -1044,9 +1615,13 @@ async function clearResumeImage(kind) {
         });
         if (kind === "signature") {
             resumeState.profile.signature_url = null;
+            // Clear the signed URL too, otherwise the A4 preview keeps
+            // rendering the signature that was just removed.
+            resumeState.profile.signature_display = null;
             renderResumeImage("signature", null, null);
         } else {
             resumeState.profile.profile_picture_url = null;
+            resumeState.profile.profile_picture_display = null;
             resumeState.profilePictureName = "";
             // Clear the file input so the same file can be re-selected later.
             const input = document.getElementById("resumeProfilePicInput");
@@ -1332,9 +1907,24 @@ async function persistOpportunityState(job, status) {
 
         if (res.status === 401) {
             handleExpiredToken();
+            return false;
         }
+
+        // The save route answers HTTP 200 with {"status":"error"} when the
+        // write fails, so res.ok on its own would report a false success and
+        // the card would look saved even though nothing was persisted.
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.status === "error") {
+            console.error("Failed to save opportunity:",
+                data.detail || ("HTTP " + res.status));
+            showToast("Could not save this opportunity. Please try again.");
+            return false;
+        }
+        return true;
     } catch (e) {
         console.error("Failed to sync state with Supabase:", e);
+        showToast("Could not save this opportunity. Please try again.");
+        return false;
     }
 }
 

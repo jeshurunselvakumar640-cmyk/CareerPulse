@@ -21,7 +21,7 @@
  *      same-origin response for a known-static file type.
  */
 
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v4";
 const CACHE_NAME = `careerpulse-static-${CACHE_VERSION}`;
 const CACHE_PREFIX = "careerpulse-static-";
 
@@ -35,7 +35,6 @@ const PRECACHE_URLS = [
     "/",
     "/app",
     "/manifest.webmanifest",
-    "/static/landing.css",
     "/static/landing.js",
     "/static/app.js",
     "/static/styles/landing.css",

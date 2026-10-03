@@ -451,6 +451,31 @@ def replace_value_list(client, resume_id: str, section: str, values: List[str]) 
         ).execute()
 
 
+def _extract_signed_url(result: Any) -> Optional[str]:
+    """Pull the signed URL out of whatever create_signed_url returned.
+
+    supabase-py returns a bare {"signedURL": ...} dict, while other versions and
+    the test double return an object exposing .signed_url or .data. Reading only
+    the object shape made every real upload render a blank preview, because the
+    signed URL came back empty and the photo fell back to the CareerPulse avatar.
+    """
+    containers: List[Any] = [result]
+    nested = result.get("data") if isinstance(result, dict) else getattr(result, "data", None)
+    if isinstance(nested, dict):
+        containers.append(nested)
+
+    for container in containers:
+        for key in ("signedURL", "signedUrl", "signed_url"):
+            value = (
+                container.get(key)
+                if isinstance(container, dict)
+                else getattr(container, key, None)
+            )
+            if isinstance(value, str) and value:
+                return value
+    return None
+
+
 def sign_asset_url(client, path: Optional[str], expires_in: int = 3600) -> Optional[str]:
     """Mint a short-lived signed URL for a private resume asset.
 
@@ -461,15 +486,16 @@ def sign_asset_url(client, path: Optional[str], expires_in: int = 3600) -> Optio
         return None
     try:
         result = client.storage.from_(ASSET_BUCKET).create_signed_url(path, expires_in)
-        signed = getattr(result, "signed_url", None)
-        if signed:
-            return signed
-        data = getattr(result, "data", None)
-        if isinstance(data, dict):
-            return data.get("signedURL") or data.get("signed_url")
+        signed = _extract_signed_url(result)
+        if not signed:
+            logger.warning(
+                "Resume asset %s was stored but no signed URL could be read "
+                "from a %s response", path, type(result).__name__
+            )
+        return signed
     except Exception as exc:
         logger.warning("Could not sign resume asset %s: %s", path, exc)
-    return None
+        return None
 
 
 def upload_asset(client, user_id: str, kind: str, data_url: str) -> str:

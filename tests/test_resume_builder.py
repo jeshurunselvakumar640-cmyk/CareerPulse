@@ -1,5 +1,5 @@
-"""
-CareerPulse — Resume Builder tests.
+﻿"""
+CareerPulse â€” Resume Builder tests.
 
 Plain-script runner (no pytest in this project), matching the existing
 tests/test_reply_tracking.py style.
@@ -430,7 +430,10 @@ class FakeStorageBucket:
         return {"path": path}
 
     def create_signed_url(self, path, expires_in):
-        return FakeResult({"signedURL": f"https://storage.test/{path}?token=signed"})
+        # The real supabase-py returns a BARE dict here, not an object with a
+        # .data attribute. Emulating the object shape instead let a broken
+        # signed-URL read pass every test while real uploads rendered blank.
+        return {"signedURL": f"https://storage.test/{path}?token=signed"}
 
 
 class FakeStorage:
@@ -754,6 +757,48 @@ check("bucket is the resume bucket", db.bucket_requested == "resume-assets")
 check("signed URL returned for display", bool(r.json().get("display_url")))
 check("only the path is persisted, never the bytes",
       client.get("/api/resume").json()["resume"]["profile_picture_url"].startswith(f"{USER_A}/"))
+
+# The private bucket means the browser can only render a signed URL. Reading
+# the signed URL out of the wrong response shape returns None and silently
+# blanks the preview, so pin every shape supabase-py has used.
+section("6b. Signed URL extraction")
+check("bare dict response yields a signed URL (real supabase-py shape)",
+      rs._extract_signed_url({"signedURL": "https://s/a?token=t"}) == "https://s/a?token=t")
+
+
+class _ObjWithSignedUrl:
+    signed_url = "https://s/b"
+
+
+check("object exposing .signed_url still works",
+      rs._extract_signed_url(_ObjWithSignedUrl()) == "https://s/b")
+check("object exposing .data dict still works",
+      rs._extract_signed_url(FakeResult({"signedURL": "https://s/c"})) == "https://s/c")
+check("dict with nested data dict still works",
+      rs._extract_signed_url({"data": {"signedURL": "https://s/d"}}) == "https://s/d")
+check("legacy signed_url key still works",
+      rs._extract_signed_url({"signed_url": "https://s/e"}) == "https://s/e")
+check("camelCase signedUrl key still works",
+      rs._extract_signed_url({"signedUrl": "https://s/f"}) == "https://s/f")
+check("response without any URL returns None",
+      rs._extract_signed_url({"error": "nope"}) is None)
+check("None response returns None", rs._extract_signed_url(None) is None)
+check("empty path signs nothing", rs.sign_asset_url(client, None) is None)
+check("blank path signs nothing", rs.sign_asset_url(client, "") is None)
+
+
+class _ExplodingBucket:
+    def create_signed_url(self, path, expires_in):
+        raise RuntimeError("storage unavailable")
+
+
+class _ExplodingStorage:
+    def from_(self, bucket):
+        return _ExplodingBucket()
+
+
+check("signing failure is swallowed and returns None",
+      rs.sign_asset_url(_ExplodingStorage(), "u/a.png") is None)
 
 check("GIF upload rejected",
       client.post("/api/resume/asset", json={"kind": "profile-picture", "data_url": data_url("image/gif", GIF_BYTES)}).status_code == 400)

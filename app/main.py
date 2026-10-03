@@ -290,7 +290,9 @@ async def supabase_health():
     try:
         return {"status": "connected", "supabase_url": settings.supabase_url[:15] + "..."}
     except Exception as e:
-        return {"status": "error", "detail": str(e)}
+        # Unauthenticated: keep the raw exception out of the response.
+        logger.error("Supabase health check failed: %s", e)
+        return {"status": "error", "detail": "Supabase health check failed."}
 
 @app.get("/api/auth/linkedin")
 async def linkedin_login(request: Request):
@@ -304,7 +306,10 @@ async def linkedin_login(request: Request):
         })
         return RedirectResponse(url=res.url)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Matches the Google route: log the detail, return a generic message so
+        # the raw exception is not echoed to an unauthenticated caller.
+        logger.error("LinkedIn OAuth error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to start LinkedIn login")
 
 @app.get("/api/auth/google")
 async def google_login(request: Request):
@@ -326,7 +331,7 @@ async def google_login(request: Request):
         raise HTTPException(status_code=500, detail="Unable to start Google login")
 
 @app.get("/api/auth/callback")
-async def auth_callback(code: str):
+async def auth_callback(request: Request, code: str):
     try:
         res = supabase.auth.exchange_code_for_session({"auth_code": code})
         session = res.session
@@ -348,6 +353,9 @@ async def auth_callback(code: str):
             value=session.access_token,
             httponly=True,
             samesite="lax",
+            # Matches the Gmail cookie below: only mark Secure on a real HTTPS
+            # connection so local http://127.0.0.1 development still works.
+            secure=str(request.url.scheme) == "https",
             path="/"
         )
         return response
@@ -496,8 +504,10 @@ async def get_saved_opportunities(request: Request, authorization: Optional[str]
         waitlisted = [r["opportunity_data"] for r in rows if r["status"] == "waitlisted"]
         return {"status": "success", "saved": interested, "waitlisted": waitlisted}
     except Exception as e:
+        # Report the failure instead of an empty success: answering 200 with no
+        # rows makes the dashboard clear a list that is still stored in the DB.
         logger.warning("Fetch saved error: %s", e)
-        return {"status": "success", "saved": [], "waitlisted": []}
+        raise HTTPException(status_code=500, detail="Could not load saved opportunities.")
 
 @app.post("/api/user/opportunities/save")
 async def save_opportunity(action: OpportunityAction, auth_tuple=Depends(require_auth_token_and_user)):
@@ -512,8 +522,11 @@ async def save_opportunity(action: OpportunityAction, auth_tuple=Depends(require
         supabase.table("user_saved_opportunities").upsert(payload, on_conflict="user_id,opportunity_key").execute()
         return {"status": "success"}
     except Exception as e:
+        # A failed write must not answer 200: the browser would treat the card
+        # as saved and the opportunity would be missing after a reload. The raw
+        # exception is logged rather than returned.
         logger.error("Save opportunity error: %s", e)
-        return {"status": "error", "detail": str(e)}
+        raise HTTPException(status_code=500, detail="Could not save this opportunity.")
 
 @app.get("/api/user/profile/insights")
 async def get_opportunity_insights(count: int = 50, request: Request = None, authorization: Optional[str] = Header(None)):
@@ -597,7 +610,11 @@ async def get_personalized_tech_news(
 # -------------------------------------------------------------------
 
 @app.post("/api/opportunity/contact-lookup")
-async def opportunity_contact_lookup(req: ContactLookupRequest):
+async def opportunity_contact_lookup(req: ContactLookupRequest,
+                                    auth_tuple=Depends(require_auth_token_and_user)):
+    # Requires a signed-in caller: this runs a paid Tavily search with the
+    # server's API key, so leaving it open lets anyone spend that quota.
+    _token, _user = auth_tuple
     data = lookup_company_contact(req.company, req.title)
     return {"status": "success", "contact": data}
 
@@ -731,11 +748,19 @@ async def send_outreach_email(req: EmailSendRequest, auth_tuple=Depends(require_
 
         return {"status": "success", "message": "Email sent successfully"}
     except Exception as e:
+        # SMTP exceptions can carry host/transport detail, so it is logged
+        # rather than echoed back to the browser.
         logger.error("Email send error: %s", e)
-        raise HTTPException(status_code=500, detail=f"Unable to send the email right now: {str(e)}")
+        raise HTTPException(status_code=500, detail="Unable to send the email right now.")
 
 @app.api_route("/api/email/test", methods=["GET", "POST"])
-async def email_test(req: Optional[EmailTestRequest] = None):
+async def email_test(req: Optional[EmailTestRequest] = None,
+                     auth_tuple=Depends(require_auth_token_and_user)):
+    # Requires a signed-in caller. Without this, anyone who could reach the API
+    # could make the server send mail to an address of their choosing, which
+    # turns the SMTP credential into an open relay and can get the sending
+    # domain blacklisted.
+    _token, _user = auth_tuple
     email_regex = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
     if req and req.to_email:
         if not re.match(email_regex, req.to_email):
@@ -756,8 +781,10 @@ async def email_test(req: Optional[EmailTestRequest] = None):
         except ValueError as ve:
             raise HTTPException(status_code=400, detail=str(ve))
         except Exception as e:
+            # The raw SMTP exception can carry host/credential detail, so it is
+            # logged server-side and only a generic message is returned.
             logger.error("SMTP test dispatch failed: %s", e)
-            raise HTTPException(status_code=500, detail=f"SMTP dispatch failure: {str(e)}")
+            raise HTTPException(status_code=500, detail="SMTP dispatch failed. Please try again.")
 
     smtp_status = verify_smtp_connection()
     if smtp_status.get("status") == "success":
@@ -1552,13 +1579,28 @@ async def upload_resume_asset(req: ResumeAssetRequest, auth_tuple=Depends(requir
         path = resume_service.upload_asset(client, user.id, req.kind, req.data_url or "")
 
         column = "profile_picture_url" if req.kind == "profile-picture" else "signature_url"
-        client.table(resume_service.RESUME_TABLE).update({column: path}).eq("id", profile["id"]).execute()
+        saved = client.table(resume_service.RESUME_TABLE).update(
+            {column: path}
+        ).eq("id", profile["id"]).execute()
+
+        # Confirm the reference really landed. A write that matches no row is
+        # not an error on its own, so without this the endpoint would report
+        # success while the photo is only in storage and the resume reloads
+        # without it.
+        rows = getattr(saved, "data", None)
+        if rows is not None and len(rows) == 0:
+            raise HTTPException(
+                status_code=500,
+                detail="The image was uploaded but could not be attached to your resume. Please try again."
+            )
+
+        display_url = resume_service.sign_asset_url(client, path)
 
         return {
             "status": "success",
-            "message": "Image uploaded",
+            "message": "Photo uploaded" if req.kind == "profile-picture" else "Signature uploaded",
             "path": path,
-            "display_url": resume_service.sign_asset_url(client, path),
+            "display_url": display_url,
         }
     except resume_service.ResumeValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))

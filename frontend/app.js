@@ -1,4 +1,4 @@
-﻿let mockOpportunities = [];
+let mockOpportunities = [];
 let savedInterestedJobs = [];
 let waitlistedJobs = [];
 let currentSwipeIndex = 0;
@@ -446,6 +446,76 @@ const RESUME_TEMPLATES = [
         tagline: "Royal Blue Geometric Curve",
         description: "Vibrant modern layout with royal blue curved banner, geometric pattern motifs, and circular icon badges.",
         preview: "template-3.png"
+    },
+    {
+        id: "template-4",
+        label: "Template 4",
+        tagline: "Golden Amber & Timeline Pins",
+        description: "Warm golden amber sidebar with clean cream body and vertical timeline pins.",
+        preview: "template-4.png"
+    },
+    {
+        id: "template-5",
+        label: "Template 5",
+        tagline: "Lilac Arch & Purple Accents",
+        description: "Elegant arched lilac sidebar with circular photo frame and lavender typographic hierarchy.",
+        preview: "template-5.png"
+    },
+    {
+        id: "template-6",
+        label: "Template 6",
+        tagline: "Slate Blue & Node Timeline",
+        description: "Dark slate blue sidebar with clean horizontal section dividers and left node timeline rail.",
+        preview: "template-6.png"
+    },
+    {
+        id: "template-7",
+        label: "Template 7",
+        tagline: "Minimalist Row Grid",
+        description: "Clean minimalist layout with section icon badges, row divider lines, and pill-shaped skill chips.",
+        preview: "template-7.png"
+    },
+    {
+        id: "template-8",
+        label: "Template 8",
+        tagline: "Turquoise & Creative Swirls",
+        description: "Playful creative design with vibrant turquoise sidebar and subtle doodle swirl motifs.",
+        preview: "template-8.png"
+    },
+    {
+        id: "template-9",
+        label: "Template 9",
+        tagline: "Minimalist Crimson Row Grid",
+        description: "Clean full-width layout with crimson icon badges, horizontal row dividers, and chip tags.",
+        preview: "template-9.png"
+    },
+    {
+        id: "template-10",
+        label: "Template 10",
+        tagline: "Framed Charcoal Header",
+        description: "Structured two-column layout with dark charcoal pill banners and double-line header frame.",
+        preview: "template-10.png"
+    },
+    {
+        id: "template-11",
+        label: "Template 11",
+        tagline: "Sky Blue Pastel Timeline",
+        description: "Clean two-column layout with pastel sky blue banners, centered photo, and rail timeline.",
+        preview: "template-11.png"
+    },
+    {
+        id: "template-12",
+        label: "Template 12",
+        tagline: "Slate Grey Banner & Icon Rows",
+        description: "Executive dark slate top banner with square photo and clean outline icon rows.",
+        preview: "template-12.png"
+    },
+    {
+        id: "template-13",
+        label: "Template 13",
+        tagline: "Cobalt Blue Inverted Sidebar",
+        description: "Prominent cobalt blue right sidebar card with white typography and left content columns.",
+        preview: "template-13.png"
     }
 ];
 
@@ -478,6 +548,10 @@ const RESUME_ICONS = {
 };
 
 function resumeTemplateById(id) {
+    if (id === "modern-blue") id = "template-3";
+    if (id === "executive") id = "template-1";
+    if (id === "early-career") id = "template-2";
+    if (id === "ats") id = "template-7";
     return RESUME_TEMPLATES.find(function (t) { return t.id === id; })
         || RESUME_TEMPLATES.find(function (t) { return t.id === RESUME_DEFAULT_TEMPLATE; });
 }
@@ -946,15 +1020,1299 @@ function renderTemplate3(model) {
         '</div>';
 }
 
+/* ---------- Template 4 (Golden Amber Sidebar + Cream Body with Timeline Pins) ---------- */
+
+function renderTemplate4(model) {
+    const p = model.profile || {};
+    const name = escapeHtml(p.name || "");
+    const headline = escapeHtml(p.headline || "");
+    const photo = model.photo
+        ? '<div class="t4-photo-wrap"><img class="t4-photo" src="' + escapeHtml(model.photo) + '" alt=""></div>'
+        : '<div class="t4-photo-wrap"><div class="t4-photo-empty"></div></div>';
+
+    const contactRows = [];
+    if (p.phone) contactRows.push('<div class="t4-contact-row"><span class="t4-contact-icon">' + RESUME_ICONS.phone + '</span><span>' + escapeHtml(p.phone) + '</span></div>');
+    if (p.email) contactRows.push('<div class="t4-contact-row"><span class="t4-contact-icon">' + RESUME_ICONS.mail + '</span><span>' + escapeHtml(p.email) + '</span></div>');
+    const loc = [p.address, p.city, p.state, p.pincode, p.country].filter(Boolean).join(", ");
+    if (loc) contactRows.push('<div class="t4-contact-row"><span class="t4-contact-icon">' + RESUME_ICONS.pin + '</span><span>' + escapeHtml(loc) + '</span></div>');
+    if (p.website_url) contactRows.push('<div class="t4-contact-row"><span class="t4-contact-icon">' + RESUME_ICONS.globe + '</span><a href="' + rvSafeHref(p.website_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.website_url) + '</a></div>');
+    if (p.date_of_birth) contactRows.push('<div class="t4-contact-row"><span class="t4-contact-icon">' + RESUME_ICONS.calendar + '</span><span>' + escapeHtml(rvDate(p.date_of_birth) || p.date_of_birth) + '</span></div>');
+    if (p.linkedin_url) contactRows.push('<div class="t4-contact-row"><span class="t4-contact-icon">' + RESUME_ICONS.linkedin + '</span><a href="' + rvSafeHref(p.linkedin_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.linkedin_url) + '</a></div>');
+    if (p.github_url) contactRows.push('<div class="t4-contact-row"><span class="t4-contact-icon">' + RESUME_ICONS.github + '</span><a href="' + rvSafeHref(p.github_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.github_url) + '</a></div>');
+
+    let sideHtml = photo;
+    if (contactRows.length) {
+        sideHtml += '<section class="t4-side-sec"><h2 class="t4-side-title">Contact</h2><div>' + contactRows.join("") + '</div></section>';
+    }
+    const skillsHtml = rvBulletListHtml(model.lists.skills, "t4-list");
+    if (skillsHtml) {
+        sideHtml += '<section class="t4-side-sec"><h2 class="t4-side-title">Skills</h2>' + skillsHtml + '</section>';
+    }
+    const langHtml = rvBulletListHtml(model.lists.languages, "t4-list");
+    if (langHtml) {
+        sideHtml += '<section class="t4-side-sec"><h2 class="t4-side-title">Languages</h2>' + langHtml + '</section>';
+    }
+    const actList = (model.lists.activities || []).filter(v => String(v || "").trim());
+    if (actList.length) {
+        sideHtml += '<section class="t4-side-sec"><h2 class="t4-side-title">Activities</h2><div class="t4-side-text">' + escapeHtml(actList.join("\n\n")) + '</div></section>';
+    }
+    const awardList = (model.lists.awards || []).filter(v => String(v || "").trim());
+    if (awardList.length) {
+        sideHtml += '<section class="t4-side-sec"><h2 class="t4-side-title">Award</h2><div class="t4-side-text">' + escapeHtml(awardList.join("\n\n")) + '</div></section>';
+    }
+
+    let mainHtml = '<div class="t4-header">' +
+        '<h1 class="t4-name">' + name + '</h1>' +
+        (headline ? '<div class="t4-headline">' + headline + '</div>' : "") +
+    '</div>';
+
+    if (model.summary) {
+        mainHtml += '<div class="t4-summary">' + escapeHtml(model.summary) + '</div>';
+    }
+
+    const edus = model.items.education || [];
+    if (edus.length) {
+        const items = edus.map(e => '<div class="t4-item">' +
+            '<div class="t4-item-info">' +
+                '<div class="t4-item-title">' + escapeHtml(e.school || e.title) + '</div>' +
+                (e.degree ? '<div class="t4-item-sub">' + escapeHtml(e.degree) + '</div>' : "") +
+                (e.grade ? '<div class="t4-item-meta">' + escapeHtml(String(e.grade).toUpperCase().includes("CGPA") ? e.grade : "CGPA " + e.grade) + '</div>' : "") +
+                (e.body && !e.grade ? '<div class="t4-item-body">' + escapeHtml(e.body) + '</div>' : "") +
+            '</div>' +
+            '<div class="t4-item-rail">' +
+                (e.meta ? '<span class="t4-item-date">' + escapeHtml(e.meta) + '</span>' : "") +
+                '<span class="t4-item-pin"></span>' +
+            '</div>' +
+        '</div>').join("");
+        mainHtml += '<section><div class="t4-sec-divider"><span class="t4-sec-title">Education</span></div><div class="t4-timeline">' + items + '</div></section>';
+    }
+
+    const exps = model.items.experience || [];
+    if (exps.length) {
+        const items = exps.map(e => '<div class="t4-item">' +
+            '<div class="t4-item-info">' +
+                '<div class="t4-item-title">' + escapeHtml(e.company || e.title) + '</div>' +
+                (e.job_title ? '<div class="t4-item-sub">' + escapeHtml(e.job_title) + '</div>' : "") +
+                (e.body ? '<div class="t4-item-body">' + escapeHtml(e.body) + '</div>' : "") +
+            '</div>' +
+            '<div class="t4-item-rail">' +
+                (e.meta ? '<span class="t4-item-date">' + escapeHtml(e.meta) + '</span>' : "") +
+                '<span class="t4-item-pin"></span>' +
+            '</div>' +
+        '</div>').join("");
+        mainHtml += '<section><div class="t4-sec-divider"><span class="t4-sec-title">Experience</span></div><div class="t4-timeline">' + items + '</div></section>';
+    }
+
+    const projs = model.items.projects || [];
+    if (projs.length) {
+        const items = projs.map(x => '<div class="t4-item" style="display:block;">' +
+            '<div class="t4-item-title">' + escapeHtml(x.title) + '</div>' +
+            (x.link ? rvLinkHtml(x.link, "t4-link") : "") +
+            (x.body ? '<div class="t4-item-body">' + escapeHtml(x.body) + '</div>' : "") +
+        '</div>').join("");
+        mainHtml += '<section><div class="t4-sec-divider"><span class="t4-sec-title">Projects</span></div>' + items + '</section>';
+    }
+
+    const refs = model.items.references || [];
+    if (refs.length) {
+        const items = refs.map(r => '<div class="t4-item" style="display:block;">' +
+            '<div class="t4-item-title">' + escapeHtml(r.name || r.title) + '</div>' +
+            (r.email ? '<div class="t4-item-meta">' + escapeHtml(r.email) + '</div>' : "") +
+            (r.phone ? '<div class="t4-item-meta">' + escapeHtml(r.phone) + '</div>' : "") +
+        '</div>').join("");
+        mainHtml += '<section><div class="t4-sec-divider"><span class="t4-sec-title">Reference</span></div>' + items + '</section>';
+    }
+
+    if (model.additional) {
+        mainHtml += '<section><div class="t4-sec-divider"><span class="t4-sec-title">Additional Information</span></div><div class="t4-item-body">' + escapeHtml(model.additional) + '</div></section>';
+    }
+
+    const sig = model.signature
+        ? '<div class="t4-sig"><img src="' + escapeHtml(model.signature) + '" alt="Signature"><div class="t4-sig-line">Authorized Signature</div></div>'
+        : "";
+
+    return '<aside class="t4-sidebar">' + sideHtml + '</aside>' +
+        '<main class="t4-main">' + mainHtml + sig + '</main>';
+}
+
+/* ---------- Template 5 (Lilac / Purple Arched Sidebar + Clean White Body) ---------- */
+
+function renderTemplate5(model) {
+    const p = model.profile || {};
+    const name = escapeHtml(p.name || "");
+    const headline = escapeHtml(p.headline || "");
+    const photo = model.photo
+        ? '<div class="t5-photo-wrap"><img class="t5-photo" src="' + escapeHtml(model.photo) + '" alt=""></div>'
+        : '<div class="t5-photo-wrap"><div class="t5-photo-empty"></div></div>';
+
+    const contactRows = [];
+    if (p.phone) contactRows.push('<div class="t5-contact-row"><span class="t5-contact-icon">' + RESUME_ICONS.phone + '</span><span>' + escapeHtml(p.phone) + '</span></div>');
+    if (p.email) contactRows.push('<div class="t5-contact-row"><span class="t5-contact-icon">' + RESUME_ICONS.mail + '</span><span>' + escapeHtml(p.email) + '</span></div>');
+    const loc = [p.address, p.city, p.state, p.pincode, p.country].filter(Boolean).join(", ");
+    if (loc) contactRows.push('<div class="t5-contact-row"><span class="t5-contact-icon">' + RESUME_ICONS.pin + '</span><span>' + escapeHtml(loc) + '</span></div>');
+    if (p.website_url) contactRows.push('<div class="t5-contact-row"><span class="t5-contact-icon">' + RESUME_ICONS.globe + '</span><a href="' + rvSafeHref(p.website_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.website_url) + '</a></div>');
+    if (p.date_of_birth) contactRows.push('<div class="t5-contact-row"><span class="t5-contact-icon">' + RESUME_ICONS.calendar + '</span><span>' + escapeHtml(rvDate(p.date_of_birth) || p.date_of_birth) + '</span></div>');
+    if (p.linkedin_url) contactRows.push('<div class="t5-contact-row"><span class="t5-contact-icon">' + RESUME_ICONS.linkedin + '</span><a href="' + rvSafeHref(p.linkedin_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.linkedin_url) + '</a></div>');
+    if (p.github_url) contactRows.push('<div class="t5-contact-row"><span class="t5-contact-icon">' + RESUME_ICONS.github + '</span><a href="' + rvSafeHref(p.github_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.github_url) + '</a></div>');
+
+    let sideHtml = '<div class="t5-arch-top">' + photo + '</div>';
+    if (contactRows.length) {
+        sideHtml += '<section class="t5-side-sec"><div style="margin-top:2mm;">' + contactRows.join("") + '</div></section>';
+    }
+    const skillsHtml = rvBulletListHtml(model.lists.skills, "t5-list");
+    if (skillsHtml) {
+        sideHtml += '<section class="t5-side-sec"><h2 class="t5-side-title">Skills</h2>' + skillsHtml + '</section>';
+    }
+    const langHtml = rvBulletListHtml(model.lists.languages, "t5-list");
+    if (langHtml) {
+        sideHtml += '<section class="t5-side-sec"><h2 class="t5-side-title">Languages</h2>' + langHtml + '</section>';
+    }
+    const actList = (model.lists.activities || []).filter(v => String(v || "").trim());
+    if (actList.length) {
+        sideHtml += '<section class="t5-side-sec"><h2 class="t5-side-title">Activities</h2><div class="t5-side-text">' + escapeHtml(actList.join("\n\n")) + '</div></section>';
+    }
+    const awardList = (model.lists.awards || []).filter(v => String(v || "").trim());
+    if (awardList.length) {
+        sideHtml += '<section class="t5-side-sec"><h2 class="t5-side-title">Award</h2><div class="t5-side-text">' + escapeHtml(awardList.join("\n\n")) + '</div></section>';
+    }
+
+    let mainHtml = '<div class="t5-header">' +
+        '<h1 class="t5-name">' + name + '</h1>' +
+        (headline ? '<div class="t5-headline">' + headline + '</div>' : "") +
+        '<div class="t5-head-line"></div>' +
+        (model.summary ? '<div class="t5-summary">' + escapeHtml(model.summary) + '</div>' : "") +
+    '</div>';
+
+    const edus = model.items.education || [];
+    if (edus.length) {
+        const items = edus.map(e => '<div class="t5-item">' +
+            '<div class="t5-item-title">' + escapeHtml(e.school || e.title) + '</div>' +
+            (e.degree ? '<div class="t5-item-sub">' + escapeHtml(e.degree) + '</div>' : "") +
+            (e.grade ? '<div class="t5-item-meta">' + escapeHtml(String(e.grade).toUpperCase().includes("CGPA") ? e.grade : "CGPA " + e.grade) + '</div>' : "") +
+            (e.meta ? '<div class="t5-item-meta">' + escapeHtml(e.meta) + '</div>' : "") +
+            (e.body && !e.grade ? '<div class="t5-item-body">' + escapeHtml(e.body) + '</div>' : "") +
+        '</div>').join("");
+        mainHtml += '<section class="t5-sec"><h2 class="t5-sec-title">Education</h2>' + items + '</section>';
+    }
+
+    const exps = model.items.experience || [];
+    if (exps.length) {
+        const items = exps.map(e => '<div class="t5-item">' +
+            '<div class="t5-item-title">' + escapeHtml(e.job_title || e.title) + '</div>' +
+            (e.company ? '<div class="t5-item-sub">' + escapeHtml(e.company) + '</div>' : "") +
+            (e.meta ? '<div class="t5-item-meta">' + escapeHtml(e.meta) + '</div>' : "") +
+            (e.body ? '<div class="t5-item-body">' + escapeHtml(e.body) + '</div>' : "") +
+        '</div>').join("");
+        mainHtml += '<section class="t5-sec"><h2 class="t5-sec-title">Experience</h2>' + items + '</section>';
+    }
+
+    const projs = model.items.projects || [];
+    if (projs.length) {
+        const items = projs.map(x => '<div class="t5-item">' +
+            '<div class="t5-item-title">' + escapeHtml(x.title) + '</div>' +
+            (x.link ? rvLinkHtml(x.link, "t5-link") : "") +
+            (x.body ? '<div class="t5-item-body">' + escapeHtml(x.body) + '</div>' : "") +
+        '</div>').join("");
+        mainHtml += '<section class="t5-sec"><h2 class="t5-sec-title">Projects</h2>' + items + '</section>';
+    }
+
+    const pubs = model.items.publications || [];
+    if (pubs.length) {
+        const items = pubs.map(x => '<div class="t5-item">' +
+            '<div class="t5-item-title">' + escapeHtml(x.title) + '</div>' +
+            (x.link ? rvLinkHtml(x.link, "t5-link") : "") +
+            (x.body ? '<div class="t5-item-body">' + escapeHtml(x.body) + '</div>' : "") +
+        '</div>').join("");
+        mainHtml += '<section class="t5-sec"><h2 class="t5-sec-title">Publications</h2>' + items + '</section>';
+    }
+
+    const refs = model.items.references || [];
+    if (refs.length) {
+        const items = refs.map(r => '<div class="t5-item">' +
+            '<div class="t5-item-title">' + escapeHtml(r.name || r.title) + '</div>' +
+            (r.email ? '<div class="t5-item-meta">' + escapeHtml(r.email) + '</div>' : "") +
+            (r.phone ? '<div class="t5-item-meta">' + escapeHtml(r.phone) + '</div>' : "") +
+        '</div>').join("");
+        mainHtml += '<section class="t5-sec"><h2 class="t5-sec-title">Reference</h2>' + items + '</section>';
+    }
+
+    if (model.additional) {
+        mainHtml += '<section class="t5-sec"><h2 class="t5-sec-title">Additional Information</h2><div class="t5-item-body">' + escapeHtml(model.additional) + '</div></section>';
+    }
+
+    const sig = model.signature
+        ? '<div class="t5-sig"><img src="' + escapeHtml(model.signature) + '" alt="Signature"><div class="t5-sig-line">Authorized Signature</div></div>'
+        : "";
+
+    return '<aside class="t5-sidebar">' + sideHtml + '</aside>' +
+        '<main class="t5-main">' + mainHtml + sig + '</main>';
+}
+
+/* ---------- Template 6 (Dark Slate Sidebar + Right Vertical Timeline) ---------- */
+
+function renderTemplate6(model) {
+    const p = model.profile || {};
+    const name = escapeHtml(p.name || "");
+    const headline = escapeHtml(p.headline || "");
+    const photo = model.photo
+        ? '<div class="t6-photo-wrap"><img class="t6-photo" src="' + escapeHtml(model.photo) + '" alt=""></div>'
+        : '<div class="t6-photo-wrap"><div class="t6-photo-empty"></div></div>';
+
+    const contactRows = [];
+    if (p.phone) contactRows.push('<div class="t6-contact-row"><span class="t6-contact-label">Phone</span><span>' + escapeHtml(p.phone) + '</span></div>');
+    if (p.email) contactRows.push('<div class="t6-contact-row"><span class="t6-contact-label">Email</span><span>' + escapeHtml(p.email) + '</span></div>');
+    const loc = [p.address, p.city, p.state, p.pincode, p.country].filter(Boolean).join(", ");
+    if (loc) contactRows.push('<div class="t6-contact-row"><span class="t6-contact-label">Location</span><span>' + escapeHtml(loc) + '</span></div>');
+    if (p.website_url) contactRows.push('<div class="t6-contact-row"><span class="t6-contact-label">Website</span><a href="' + rvSafeHref(p.website_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.website_url) + '</a></div>');
+    if (p.date_of_birth) contactRows.push('<div class="t6-contact-row"><span class="t6-contact-label">Birthdate</span><span>' + escapeHtml(rvDate(p.date_of_birth) || p.date_of_birth) + '</span></div>');
+    if (p.linkedin_url) contactRows.push('<div class="t6-contact-row"><span class="t6-contact-label">LinkedIn</span><a href="' + rvSafeHref(p.linkedin_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.linkedin_url) + '</a></div>');
+    if (p.github_url) contactRows.push('<div class="t6-contact-row"><span class="t6-contact-label">GitHub</span><a href="' + rvSafeHref(p.github_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.github_url) + '</a></div>');
+
+    let sideHtml = photo;
+    if (contactRows.length) {
+        sideHtml += '<section class="t6-side-sec"><h2 class="t6-side-title">Contact Details</h2><div>' + contactRows.join("") + '</div></section>';
+    }
+    const skillsHtml = rvBulletListHtml(model.lists.skills, "t6-list");
+    if (skillsHtml) {
+        sideHtml += '<section class="t6-side-sec"><h2 class="t6-side-title">Skills</h2>' + skillsHtml + '</section>';
+    }
+    const langHtml = rvBulletListHtml(model.lists.languages, "t6-list");
+    if (langHtml) {
+        sideHtml += '<section class="t6-side-sec"><h2 class="t6-side-title">Languages</h2>' + langHtml + '</section>';
+    }
+    const actList = (model.lists.activities || []).filter(v => String(v || "").trim());
+    if (actList.length) {
+        sideHtml += '<section class="t6-side-sec"><h2 class="t6-side-title">Activities</h2><div class="t6-side-text">' + escapeHtml(actList.join("\n\n")) + '</div></section>';
+    }
+
+    let mainHtml = '<div class="t6-header">' +
+        '<h1 class="t6-name">' + name + '</h1>' +
+        (headline ? '<div class="t6-headline">' + headline + '</div>' : "") +
+        (model.summary ? '<div class="t6-summary">' + escapeHtml(model.summary) + '</div>' : "") +
+    '</div>';
+
+    const edus = model.items.education || [];
+    if (edus.length) {
+        const items = edus.map(e => '<div class="t6-timeline-item">' +
+            '<span class="t6-node"></span>' +
+            (e.meta ? '<div class="t6-item-date">' + escapeHtml(e.meta) + '</div>' : "") +
+            '<div class="t6-item-title">' + escapeHtml(e.school || e.title) + '</div>' +
+            (e.degree ? '<div class="t6-item-sub">' + escapeHtml(e.degree) + (e.grade ? ' - ' + escapeHtml(e.grade) : '') + '</div>' : "") +
+            (e.body && !e.grade ? '<div class="t6-item-body">' + escapeHtml(e.body) + '</div>' : "") +
+        '</div>').join("");
+        mainHtml += '<section class="t6-sec"><h2 class="t6-sec-title">Education</h2><div>' + items + '</div></section>';
+    }
+
+    const exps = model.items.experience || [];
+    if (exps.length) {
+        const items = exps.map(e => '<div class="t6-timeline-item">' +
+            '<span class="t6-node"></span>' +
+            (e.meta ? '<div class="t6-item-date">' + escapeHtml(e.meta) + '</div>' : "") +
+            '<div class="t6-item-title">' + escapeHtml(e.company || e.title) + '</div>' +
+            (e.job_title ? '<div class="t6-item-sub">' + escapeHtml(e.job_title) + '</div>' : "") +
+            (e.body ? '<div class="t6-item-body">' + escapeHtml(e.body) + '</div>' : "") +
+        '</div>').join("");
+        mainHtml += '<section class="t6-sec"><h2 class="t6-sec-title">Experience</h2><div>' + items + '</div></section>';
+    }
+
+    const projs = model.items.projects || [];
+    if (projs.length) {
+        const items = projs.map(x => '<div class="t6-item-plain">' +
+            '<div class="t6-item-title">' + escapeHtml(x.title) + '</div>' +
+            (x.link ? rvLinkHtml(x.link, "t6-link") : "") +
+            (x.body ? '<div class="t6-item-body">' + escapeHtml(x.body) + '</div>' : "") +
+        '</div>').join("");
+        mainHtml += '<section class="t6-sec"><h2 class="t6-sec-title">Projects</h2>' + items + '</section>';
+    }
+
+    const refs = model.items.references || [];
+    if (refs.length) {
+        const items = refs.map(r => '<div class="t6-item-plain">' +
+            '<div class="t6-item-title">' + escapeHtml(r.name || r.title) + '</div>' +
+            (r.phone ? '<div class="t6-item-sub"><strong>Phone:</strong> ' + escapeHtml(r.phone) + '</div>' : "") +
+            (r.email ? '<div class="t6-item-sub"><strong>Email:</strong> ' + escapeHtml(r.email) + '</div>' : "") +
+        '</div>').join("");
+        mainHtml += '<section class="t6-sec"><h2 class="t6-sec-title">Reference</h2>' + items + '</section>';
+    }
+
+    if (model.additional) {
+        mainHtml += '<section class="t6-sec"><h2 class="t6-sec-title">Additional Information</h2><div class="t6-item-body">' + escapeHtml(model.additional) + '</div></section>';
+    }
+
+    const sig = model.signature
+        ? '<div class="t6-sig"><img src="' + escapeHtml(model.signature) + '" alt="Signature"><div class="t6-sig-line">Authorized Signature</div></div>'
+        : "";
+
+    return '<aside class="t6-sidebar">' + sideHtml + '</aside>' +
+        '<main class="t6-main">' + mainHtml + sig + '</main>';
+}
+
+/* ---------- Template 7 (Minimalist Grid Rows with Icons and Divider Lines) ---------- */
+
+function renderTemplate7(model) {
+    const p = model.profile || {};
+    const name = escapeHtml(p.name || "");
+    const headline = escapeHtml(p.headline || "");
+    const photo = model.photo
+        ? '<div class="t7-photo-wrap"><img class="t7-photo" src="' + escapeHtml(model.photo) + '" alt=""></div>'
+        : '<div class="t7-photo-wrap"><div class="t7-photo-empty"></div></div>';
+
+    const contactItems = [];
+    if (p.phone) contactItems.push('<div class="t7-contact-item">' + RESUME_ICONS.phone + '<span>' + escapeHtml(p.phone) + '</span></div>');
+    if (p.email) contactItems.push('<div class="t7-contact-item">' + RESUME_ICONS.mail + '<span>' + escapeHtml(p.email) + '</span></div>');
+    if (p.website_url) contactItems.push('<div class="t7-contact-item">' + RESUME_ICONS.globe + '<a href="' + rvSafeHref(p.website_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.website_url) + '</a></div>');
+    if (p.date_of_birth) contactItems.push('<div class="t7-contact-item">' + RESUME_ICONS.calendar + '<span>' + escapeHtml(rvDate(p.date_of_birth) || p.date_of_birth) + '</span></div>');
+    const loc = [p.address, p.city, p.state, p.pincode, p.country].filter(Boolean).join(", ");
+    if (loc) contactItems.push('<div class="t7-contact-item" style="flex-basis:100%;">' + RESUME_ICONS.pin + '<span>' + escapeHtml(loc) + '</span></div>');
+
+    const header = '<div class="t7-top-bar"></div>' +
+        '<header class="t7-header">' +
+            photo +
+            '<div class="t7-header-info">' +
+                '<h1 class="t7-name">' + name + '</h1>' +
+                (headline ? '<div class="t7-headline">' + headline + '</div>' : "") +
+                (contactItems.length ? '<div class="t7-header-contact">' + contactItems.join("") + '</div>' : "") +
+            '</div>' +
+        '</header>';
+
+    function t7Row(title, icon, content) {
+        if (!content) return "";
+        return '<div class="t7-row">' +
+            '<div class="t7-row-label">' +
+                '<span class="t7-row-icon">' + icon + '</span>' +
+                '<span>' + escapeHtml(title) + '</span>' +
+            '</div>' +
+            '<div class="t7-row-content">' + content + '</div>' +
+        '</div>';
+    }
+
+    let rowsHtml = "";
+
+    if (model.summary) {
+        rowsHtml += t7Row("Summary", RESUME_ICONS.globe, escapeHtml(model.summary));
+    }
+
+    const exps = model.items.experience || [];
+    if (exps.length) {
+        const items = exps.map(e => '<div class="t7-item">' +
+            '<div class="t7-item-head">' +
+                '<span class="t7-item-title">' + escapeHtml(e.company || e.title) + '</span>' +
+                (e.meta ? '<span class="t7-item-meta">' + escapeHtml(e.meta) + '</span>' : "") +
+            '</div>' +
+            (e.job_title ? '<div class="t7-item-sub">' + escapeHtml(e.job_title) + '</div>' : "") +
+            (e.body ? '<div class="t7-item-body">' + escapeHtml(e.body) + '</div>' : "") +
+        '</div>').join("");
+        rowsHtml += t7Row("Experience", RESUME_ICONS.calendar, items);
+    }
+
+    const edus = model.items.education || [];
+    if (edus.length) {
+        const items = edus.map(e => '<div class="t7-item">' +
+            '<div class="t7-item-head">' +
+                '<span class="t7-item-title">' + escapeHtml(e.school || e.title) + '</span>' +
+                (e.meta ? '<span class="t7-item-meta">' + escapeHtml(e.meta) + '</span>' : "") +
+            '</div>' +
+            (e.degree ? '<div class="t7-item-sub">' + escapeHtml(e.degree) + (e.grade ? ' - ' + escapeHtml(e.grade) : '') + '</div>' : "") +
+        '</div>').join("");
+        rowsHtml += t7Row("Education", RESUME_ICONS.pin, items);
+    }
+
+    const skills = (model.lists.skills || []).filter(v => String(v || "").trim());
+    if (skills.length) {
+        rowsHtml += t7Row("Skills", RESUME_ICONS.globe, '<div class="t7-chips">' + skills.map(s => '<span class="t7-chip">' + escapeHtml(s) + '</span>').join("") + '</div>');
+    }
+
+    const langs = (model.lists.languages || []).filter(v => String(v || "").trim());
+    if (langs.length) {
+        rowsHtml += t7Row("Languages", RESUME_ICONS.globe, '<div class="t7-chips">' + langs.map(s => '<span class="t7-chip">' + escapeHtml(s) + '</span>').join("") + '</div>');
+    }
+
+    const acts = (model.lists.activities || []).filter(v => String(v || "").trim());
+    if (acts.length) {
+        rowsHtml += t7Row("Activities", RESUME_ICONS.calendar, escapeHtml(acts.join(", ")));
+    }
+
+    const projs = model.items.projects || [];
+    if (projs.length) {
+        const items = projs.map(x => '<div class="t7-item">' +
+            '<div class="t7-item-title">' + escapeHtml(x.title) + '</div>' +
+            (x.body ? '<div class="t7-item-body">' + escapeHtml(x.body) + '</div>' : "") +
+        '</div>').join("");
+        rowsHtml += t7Row("Projects", RESUME_ICONS.globe, items);
+    }
+
+    const pubs = model.items.publications || [];
+    if (pubs.length) {
+        const items = pubs.map(x => '<div class="t7-item">' +
+            '<div class="t7-item-title">' + escapeHtml(x.title) + '</div>' +
+            (x.body ? '<div class="t7-item-body">' + escapeHtml(x.body) + '</div>' : "") +
+        '</div>').join("");
+        rowsHtml += t7Row("Publications", RESUME_ICONS.globe, items);
+    }
+
+    const awards = (model.lists.awards || []).filter(v => String(v || "").trim());
+    if (awards.length) {
+        rowsHtml += t7Row("Award", RESUME_ICONS.calendar, escapeHtml(awards.join(", ")));
+    }
+
+    const hobs = (model.lists.hobbies || []).filter(v => String(v || "").trim());
+    if (hobs.length) {
+        rowsHtml += t7Row("Interest", RESUME_ICONS.globe, '<div class="t7-chips">' + hobs.map(s => '<span class="t7-chip">' + escapeHtml(s) + '</span>').join("") + '</div>');
+    }
+
+    const refs = model.items.references || [];
+    if (refs.length) {
+        const items = refs.map(r => '<div class="t7-item">' +
+            '<div class="t7-item-title">' + escapeHtml(r.name || r.title) + '</div>' +
+            (r.company ? '<div class="t7-item-sub">' + escapeHtml(r.company) + '</div>' : "") +
+            (r.email ? '<div class="t7-item-meta">' + escapeHtml(r.email) + '</div>' : "") +
+        '</div>').join("");
+        rowsHtml += t7Row("Reference", RESUME_ICONS.pin, items);
+    }
+
+    if (model.additional) {
+        rowsHtml += t7Row("Additional Information", RESUME_ICONS.globe, escapeHtml(model.additional));
+    }
+
+    const sig = model.signature
+        ? '<div class="t7-sig-container">' +
+            '<div class="t7-sig-box">' +
+                '<span class="t7-sig-text">Signature:</span>' +
+                '<div class="t7-sig-img-wrap">' +
+                    '<img src="' + escapeHtml(model.signature) + '" alt="Signature">' +
+                    '<div class="t7-sig-name">' + name + '</div>' +
+                '</div>' +
+            '</div>' +
+        '</div>'
+        : "";
+
+    return header + '<div class="t7-body">' + rowsHtml + sig + '</div>';
+}
+
+/* ---------- Template 8 (Turquoise Sidebar + White Body with Swirl Motifs) ---------- */
+
+function renderTemplate8(model) {
+    const p = model.profile || {};
+    const name = escapeHtml(p.name || "");
+    const headline = escapeHtml(p.headline || "");
+    const photo = model.photo
+        ? '<div class="t8-photo-wrap"><img class="t8-photo" src="' + escapeHtml(model.photo) + '" alt=""></div>'
+        : '<div class="t8-photo-wrap"><div class="t8-photo-empty"></div></div>';
+
+    const contactRows = [];
+    if (p.phone) contactRows.push('<div class="t8-contact-item"><strong>Phone:</strong> ' + escapeHtml(p.phone) + '</div>');
+    if (p.email) contactRows.push('<div class="t8-contact-item"><strong>Email:</strong> ' + escapeHtml(p.email) + '</div>');
+    const loc = [p.address, p.city, p.state, p.pincode, p.country].filter(Boolean).join(", ");
+    if (loc) contactRows.push('<div class="t8-contact-item"><strong>Location:</strong> ' + escapeHtml(loc) + '</div>');
+    if (p.website_url) contactRows.push('<div class="t8-contact-item"><strong>Website:</strong> <a href="' + rvSafeHref(p.website_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.website_url) + '</a></div>');
+    if (p.date_of_birth) contactRows.push('<div class="t8-contact-item"><strong>Birthdate:</strong> ' + escapeHtml(rvDate(p.date_of_birth) || p.date_of_birth) + '</div>');
+    if (p.linkedin_url) contactRows.push('<div class="t8-contact-item"><strong>LinkedIn:</strong> <a href="' + rvSafeHref(p.linkedin_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.linkedin_url) + '</a></div>');
+    if (p.github_url) contactRows.push('<div class="t8-contact-item"><strong>GitHub:</strong> <a href="' + rvSafeHref(p.github_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.github_url) + '</a></div>');
+
+    let sideHtml = photo;
+    if (contactRows.length) {
+        sideHtml += '<section class="t8-side-sec"><h2 class="t8-side-title">Contact Details:</h2><div>' + contactRows.join("") + '</div></section>';
+    }
+    if (model.summary) {
+        sideHtml += '<section class="t8-side-sec"><h2 class="t8-side-title">Summary:</h2><div class="t8-side-text">' + escapeHtml(model.summary) + '</div></section>';
+    }
+    const skillsHtml = rvBulletListHtml(model.lists.skills, "t8-list");
+    if (skillsHtml) {
+        sideHtml += '<section class="t8-side-sec"><h2 class="t8-side-title">Skills:</h2>' + skillsHtml + '</section>';
+    }
+    const langHtml = rvBulletListHtml(model.lists.languages, "t8-list");
+    if (langHtml) {
+        sideHtml += '<section class="t8-side-sec"><h2 class="t8-side-title">Languages:</h2>' + langHtml + '</section>';
+    }
+    const actList = (model.lists.activities || []).filter(v => String(v || "").trim());
+    if (actList.length) {
+        sideHtml += '<section class="t8-side-sec"><h2 class="t8-side-title">Activities:</h2><div class="t8-side-text">' + escapeHtml(actList.join("\n\n")) + '</div></section>';
+    }
+
+    const swirlTopSvg = '<svg class="t8-swirl-top" viewBox="0 0 100 80" fill="none" stroke="#51c9d9" stroke-width="2"><path d="M10,40 C30,10 60,10 70,35 C80,60 50,70 40,50 C30,30 60,15 95,25"/></svg>';
+    const swirlBottomSvg = '<svg class="t8-swirl-bottom" viewBox="0 0 120 100" fill="none" stroke="#51c9d9" stroke-width="2"><path d="M20,80 C10,50 40,20 70,40 C100,60 90,90 60,85 C30,80 50,30 90,20 C110,15 115,35 105,55 C95,75 110,90 120,80"/></svg>';
+
+    let mainHtml = swirlTopSvg + swirlBottomSvg +
+        '<div class="t8-header">' +
+            '<h1 class="t8-name">' + name + '</h1>' +
+            (headline ? '<div class="t8-headline">' + headline + '</div>' : "") +
+        '</div>';
+
+    const edus = model.items.education || [];
+    if (edus.length) {
+        const items = edus.map(e => '<div class="t8-item">' +
+            '<div class="t8-item-title">' + escapeHtml(e.school || e.title) + '</div>' +
+            (e.meta ? '<div class="t8-item-meta">' + escapeHtml(e.meta) + '</div>' : "") +
+            (e.degree ? '<div class="t8-item-sub">' + escapeHtml(e.degree) + (e.grade ? ' - ' + escapeHtml(e.grade) : '') + '</div>' : "") +
+            (e.body && !e.grade ? '<div class="t8-item-body">' + escapeHtml(e.body) + '</div>' : "") +
+        '</div>').join("");
+        mainHtml += '<section class="t8-sec"><h2 class="t8-sec-title">Education:</h2>' + items + '</section>';
+    }
+
+    const exps = model.items.experience || [];
+    if (exps.length) {
+        const items = exps.map(e => '<div class="t8-item">' +
+            '<div class="t8-item-head">' +
+                '<span class="t8-item-title">' + escapeHtml(e.job_title || e.title) + '</span>' +
+                (e.meta ? '<span class="t8-item-meta">' + escapeHtml(e.meta) + '</span>' : "") +
+            '</div>' +
+            (e.company ? '<div class="t8-item-sub">' + escapeHtml(e.company) + '</div>' : "") +
+            (e.body ? '<div class="t8-item-body">' + escapeHtml(e.body) + '</div>' : "") +
+        '</div>').join("");
+        mainHtml += '<section class="t8-sec"><h2 class="t8-sec-title">Experience:</h2>' + items + '</section>';
+    }
+
+    const projs = model.items.projects || [];
+    if (projs.length) {
+        const items = projs.map(x => '<div class="t8-item">' +
+            '<div class="t8-item-title">' + escapeHtml(x.title) + '</div>' +
+            (x.link ? rvLinkHtml(x.link, "t8-link") : "") +
+            (x.body ? '<div class="t8-item-body">' + escapeHtml(x.body) + '</div>' : "") +
+        '</div>').join("");
+        mainHtml += '<section class="t8-sec"><h2 class="t8-sec-title">Projects:</h2>' + items + '</section>';
+    }
+
+    const refs = model.items.references || [];
+    if (refs.length) {
+        const items = refs.map(r => '<div class="t8-item">' +
+            '<div class="t8-item-title">' + escapeHtml(r.name || r.title) + '</div>' +
+            (r.email ? '<div class="t8-item-meta">' + escapeHtml(r.email) + '</div>' : "") +
+            (r.phone ? '<div class="t8-item-meta">' + escapeHtml(r.phone) + '</div>' : "") +
+        '</div>').join("");
+        mainHtml += '<section class="t8-sec"><h2 class="t8-sec-title">Reference:</h2>' + items + '</section>';
+    }
+
+    if (model.additional) {
+        mainHtml += '<section class="t8-sec"><h2 class="t8-sec-title">Additional Information:</h2><div class="t8-item-body">' + escapeHtml(model.additional) + '</div></section>';
+    }
+
+    const sig = model.signature
+        ? '<div class="t8-sig"><img src="' + escapeHtml(model.signature) + '" alt="Signature"><div class="t8-sig-line">Authorized Signature</div></div>'
+        : "";
+
+    return '<aside class="t8-sidebar">' + sideHtml + '</aside>' +
+        '<main class="t8-main">' + mainHtml + sig + '</main>';
+}
+
 /* Template dispatcher: one model in, one A4 sheet out. */
+
+/* ---------- Template 9 (Minimalist Full-Width Crimson Row Grid) ---------- */
+
+function renderTemplate9(model) {
+    const p = model.profile || {};
+    const name = escapeHtml(p.name || "");
+    const headline = escapeHtml(p.headline || "");
+
+    const contactItems = [];
+    if (p.phone) contactItems.push('<span class="t9-contact-item"><span class="t9-contact-icon">' + RESUME_ICONS.phone + '</span> ' + escapeHtml(p.phone) + '</span>');
+    if (p.email) contactItems.push('<span class="t9-contact-item"><span class="t9-contact-icon">' + RESUME_ICONS.mail + '</span> ' + escapeHtml(p.email) + '</span>');
+    if (p.website_url) contactItems.push('<span class="t9-contact-item"><span class="t9-contact-icon">' + RESUME_ICONS.globe + '</span> <a href="' + rvSafeHref(p.website_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.website_url) + '</a></span>');
+    if (p.date_of_birth) contactItems.push('<span class="t9-contact-item"><span class="t9-contact-icon">' + RESUME_ICONS.calendar + '</span> ' + escapeHtml(rvDate(p.date_of_birth) || p.date_of_birth) + '</span>');
+    const loc = [p.address, p.city, p.state, p.pincode, p.country].filter(Boolean).join(", ");
+    if (loc) contactItems.push('<span class="t9-contact-item"><span class="t9-contact-icon">' + RESUME_ICONS.pin + '</span> ' + escapeHtml(loc) + '</span>');
+
+    const photoHtml = model.photo
+        ? '<div style="width:24mm;height:24mm;flex-shrink:0;border-radius:2mm;overflow:hidden;"><img src="' + escapeHtml(model.photo) + '" alt="" style="width:100%;height:100%;object-fit:cover;display:block;"></div>'
+        : "";
+
+    const header = '<header class="t9-header">' +
+        '<div class="t9-header-text">' +
+            '<h1 class="t9-name">' + name + '</h1>' +
+            (headline ? '<div class="t9-headline">' + headline + '</div>' : "") +
+            '<div class="t9-contact-row">' + contactItems.join("") + '</div>' +
+        '</div>' +
+        photoHtml +
+    '</header>';
+
+    function t9Row(title, icon, content) {
+        if (!content) return "";
+        return '<div class="t9-row">' +
+            '<div class="t9-sec-title"><span class="t9-badge-icon">' + icon + '</span><span>' + escapeHtml(title) + '</span></div>' +
+            '<div class="t9-content">' + content + '</div>' +
+        '</div>';
+    }
+
+    let rowsHtml = "";
+
+    if (model.summary) {
+        rowsHtml += t9Row("Summary", RESUME_ICONS.globe, escapeHtml(model.summary));
+    }
+
+    const exp = model.items.experience || [];
+    if (exp.length) {
+        const items = exp.map(e => '<div class="t9-entry">' +
+            '<div class="t9-entry-head">' +
+                '<span class="t9-entry-title">' + escapeHtml(e.company) + '</span>' +
+                (e.meta ? '<span class="t9-entry-dates">' + escapeHtml(e.meta) + '</span>' : "") +
+            '</div>' +
+            (e.job_title ? '<div class="t9-entry-sub">' + escapeHtml(e.job_title) + '</div>' : "") +
+            (e.body ? '<div style="margin-top:1mm;">' + escapeHtml(e.body) + '</div>' : "") +
+        '</div>').join("");
+        rowsHtml += t9Row("Experience", RESUME_ICONS.briefcase, items);
+    }
+
+    const edu = model.items.education || [];
+    if (edu.length) {
+        const items = edu.map(e => '<div class="t9-entry">' +
+            '<div class="t9-entry-head">' +
+                '<span class="t9-entry-title">' + escapeHtml(e.school) + '</span>' +
+                (e.meta ? '<span class="t9-entry-dates">' + escapeHtml(e.meta) + '</span>' : "") +
+            '</div>' +
+            (e.degree ? '<div class="t9-entry-sub">' + escapeHtml(e.degree) + '</div>' : "") +
+            (e.grade ? '<div class="t9-entry-dates" style="margin-top:0.5mm;">' + escapeHtml(e.grade) + '</div>' : "") +
+        '</div>').join("");
+        rowsHtml += t9Row("Education", RESUME_ICONS.grad, items);
+    }
+
+    const skills = (model.lists.skills || []).filter(v => String(v || "").trim());
+    if (skills.length) {
+        rowsHtml += t9Row("Skills", RESUME_ICONS.briefcase, '<div class="t9-chips">' + skills.map(s => '<span class="t9-chip">' + escapeHtml(s) + '</span>').join("") + '</div>');
+    }
+
+    const langs = (model.lists.languages || []).filter(v => String(v || "").trim());
+    if (langs.length) {
+        rowsHtml += t9Row("Languages", RESUME_ICONS.globe, '<div class="t9-chips">' + langs.map(s => '<span class="t9-chip">' + escapeHtml(s) + '</span>').join("") + '</div>');
+    }
+
+    const acts = (model.lists.activities || []).filter(v => String(v || "").trim());
+    if (acts.length) {
+        rowsHtml += t9Row("Activities", RESUME_ICONS.calendar, escapeHtml(acts.join(", ")));
+    }
+
+    const projs = model.items.projects || [];
+    if (projs.length) {
+        const items = projs.map(x => '<div class="t9-entry">' +
+            '<div class="t9-entry-title">' + escapeHtml(x.title) + '</div>' +
+            (x.body ? '<div>' + escapeHtml(x.body) + '</div>' : "") +
+        '</div>').join("");
+        rowsHtml += t9Row("Projects", RESUME_ICONS.globe, items);
+    }
+
+    const pubs = model.items.publications || [];
+    if (pubs.length) {
+        const items = pubs.map(x => '<div class="t9-entry">' +
+            '<div class="t9-entry-title">' + escapeHtml(x.title) + '</div>' +
+            (x.body ? '<div>' + escapeHtml(x.body) + '</div>' : "") +
+        '</div>').join("");
+        rowsHtml += t9Row("Publications", RESUME_ICONS.globe, items);
+    }
+
+    const awards = (model.lists.awards || []).filter(v => String(v || "").trim());
+    if (awards.length) {
+        rowsHtml += t9Row("Award", RESUME_ICONS.calendar, escapeHtml(awards.join(", ")));
+    }
+
+    const hobs = (model.lists.hobbies || []).filter(v => String(v || "").trim());
+    if (hobs.length) {
+        rowsHtml += t9Row("Interest", RESUME_ICONS.globe, '<div class="t9-chips">' + hobs.map(s => '<span class="t9-chip">' + escapeHtml(s) + '</span>').join("") + '</div>');
+    }
+
+    const refs = model.items.references || [];
+    if (refs.length) {
+        const items = refs.map(r => '<div class="t9-entry">' +
+            '<div class="t9-entry-title">' + escapeHtml(r.name || r.title) + '</div>' +
+            (r.company ? '<div class="t9-entry-sub">' + escapeHtml(r.company) + '</div>' : "") +
+            (r.email ? '<div class="t9-entry-dates">' + escapeHtml(r.email) + '</div>' : "") +
+        '</div>').join("");
+        rowsHtml += t9Row("Reference", RESUME_ICONS.pin, items);
+    }
+
+    if (model.additional) {
+        rowsHtml += t9Row("Additional Information", RESUME_ICONS.globe, escapeHtml(model.additional));
+    }
+
+    const sig = model.signature
+        ? '<div class="t9-sig-wrap">' +
+            '<div class="t9-sig-box">' +
+                '<span class="t9-sig-label">Signature:</span>' +
+                '<div>' +
+                    '<img class="t9-sig-img" src="' + escapeHtml(model.signature) + '" alt="Signature">' +
+                    '<div class="t9-sig-name">' + name + '</div>' +
+                '</div>' +
+            '</div>' +
+        '</div>'
+        : "";
+
+    return header + '<div class="t9-table">' + rowsHtml + '</div>' + sig;
+}
+
+/* ---------- Template 10 (Framed Charcoal Header + Solid Pill Banners) ---------- */
+
+function renderTemplate10(model) {
+    const p = model.profile || {};
+    const name = escapeHtml(p.name || "");
+    const headline = escapeHtml(p.headline || "");
+
+    const photo = model.photo
+        ? '<div class="t10-photo-wrap"><img class="t10-photo" src="' + escapeHtml(model.photo) + '" alt=""></div>'
+        : '<div class="t10-photo-wrap"><div class="t10-photo-empty"></div></div>';
+
+    const contactItems = [];
+    if (p.phone) contactItems.push('<div class="t10-contact-item"><span style="color:#515151;">' + RESUME_ICONS.phone + '</span> ' + escapeHtml(p.phone) + '</div>');
+    if (p.email) contactItems.push('<div class="t10-contact-item"><span style="color:#515151;">' + RESUME_ICONS.mail + '</span> ' + escapeHtml(p.email) + '</div>');
+    const loc = [p.address, p.city, p.state, p.pincode, p.country].filter(Boolean).join(", ");
+    if (loc) contactItems.push('<div class="t10-contact-item"><span style="color:#515151;">' + RESUME_ICONS.pin + '</span> ' + escapeHtml(loc) + '</div>');
+    if (p.website_url) contactItems.push('<div class="t10-contact-item"><span style="color:#515151;">' + RESUME_ICONS.globe + '</span> <a href="' + rvSafeHref(p.website_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.website_url) + '</a></div>');
+    if (p.date_of_birth) contactItems.push('<div class="t10-contact-item"><span style="color:#515151;">' + RESUME_ICONS.calendar + '</span> ' + escapeHtml(rvDate(p.date_of_birth) || p.date_of_birth) + '</div>');
+
+    const header = '<header class="t10-header-wrap">' +
+        photo +
+        '<div class="t10-header-info">' +
+            '<h1 class="t10-name">' + name + '</h1>' +
+            (headline ? '<div class="t10-headline">' + headline + '</div>' : "") +
+            '<div class="t10-contact-grid">' + contactItems.join("") + '</div>' +
+        '</div>' +
+    '</header>';
+
+    function t10Banner(title, icon) {
+        return '<div class="t10-banner"><span class="t10-banner-icon">' + icon + '</span> ' + escapeHtml(title) + '</div>';
+    }
+
+    // Left Column: Summary, Skills, Languages, Activities, Award, Reference, Additional
+    let leftHtml = "";
+    if (model.summary) {
+        leftHtml += '<div class="t10-sec">' + t10Banner("Summary", RESUME_ICONS.globe) + '<div>' + escapeHtml(model.summary) + '</div></div>';
+    }
+    const skills = (model.lists.skills || []).filter(v => String(v || "").trim());
+    if (skills.length) {
+        leftHtml += '<div class="t10-sec">' + t10Banner("Skills", RESUME_ICONS.briefcase) + rvBulletListHtml(skills, "t10-bullets") + '</div>';
+    }
+    const langs = (model.lists.languages || []).filter(v => String(v || "").trim());
+    if (langs.length) {
+        leftHtml += '<div class="t10-sec">' + t10Banner("Languages", RESUME_ICONS.globe) + rvBulletListHtml(langs, "t10-bullets") + '</div>';
+    }
+    const acts = (model.lists.activities || []).filter(v => String(v || "").trim());
+    if (acts.length) {
+        leftHtml += '<div class="t10-sec">' + t10Banner("Activities", RESUME_ICONS.calendar) + '<div>' + escapeHtml(acts.join(", ")) + '</div></div>';
+    }
+    const awards = (model.lists.awards || []).filter(v => String(v || "").trim());
+    if (awards.length) {
+        leftHtml += '<div class="t10-sec">' + t10Banner("Award", RESUME_ICONS.calendar) + '<div>' + escapeHtml(awards.join(", ")) + '</div></div>';
+    }
+    const refs = model.items.references || [];
+    if (refs.length) {
+        const items = refs.map(r => '<div class="t10-entry">' +
+            '<div class="t10-entry-title">' + escapeHtml(r.name || r.title) + '</div>' +
+            (r.company ? '<div class="t10-entry-sub">' + escapeHtml(r.company) + '</div>' : "") +
+            (r.email ? '<div class="t10-entry-dates">' + escapeHtml(r.email) + '</div>' : "") +
+        '</div>').join("");
+        leftHtml += '<div class="t10-sec">' + t10Banner("Reference", RESUME_ICONS.pin) + items + '</div>';
+    }
+    if (model.additional) {
+        leftHtml += '<div class="t10-sec">' + t10Banner("Additional Information", RESUME_ICONS.globe) + '<div>' + escapeHtml(model.additional) + '</div></div>';
+    }
+
+    // Right Column: Experience, Education, Projects, Publications, Interest
+    let rightHtml = "";
+    const exp = model.items.experience || [];
+    if (exp.length) {
+        const items = exp.map(e => '<div class="t10-entry">' +
+            '<div class="t10-entry-head">' +
+                '<span class="t10-entry-title">' + escapeHtml(e.company) + '</span>' +
+                (e.meta ? '<span class="t10-entry-dates">' + escapeHtml(e.meta) + '</span>' : "") +
+            '</div>' +
+            (e.job_title ? '<div class="t10-entry-sub">' + escapeHtml(e.job_title) + '</div>' : "") +
+            (e.body ? '<div style="margin-top:1mm;">' + escapeHtml(e.body) + '</div>' : "") +
+        '</div>').join("");
+        rightHtml += '<div class="t10-sec">' + t10Banner("Experience", RESUME_ICONS.briefcase) + items + '</div>';
+    }
+    const edu = model.items.education || [];
+    if (edu.length) {
+        const items = edu.map(e => '<div class="t10-entry">' +
+            '<div class="t10-entry-head">' +
+                '<span class="t10-entry-title">' + escapeHtml(e.school) + '</span>' +
+                (e.meta ? '<span class="t10-entry-dates">' + escapeHtml(e.meta) + '</span>' : "") +
+            '</div>' +
+            (e.degree ? '<div class="t10-entry-sub">' + escapeHtml(e.degree) + '</div>' : "") +
+            (e.grade ? '<div class="t10-entry-dates" style="margin-top:0.5mm;">' + escapeHtml(e.grade) + '</div>' : "") +
+        '</div>').join("");
+        rightHtml += '<div class="t10-sec">' + t10Banner("Education", RESUME_ICONS.grad) + items + '</div>';
+    }
+    const projs = model.items.projects || [];
+    if (projs.length) {
+        const items = projs.map(x => '<div class="t10-entry">' +
+            '<div class="t10-entry-title">' + escapeHtml(x.title) + '</div>' +
+            (x.body ? '<div>' + escapeHtml(x.body) + '</div>' : "") +
+        '</div>').join("");
+        rightHtml += '<div class="t10-sec">' + t10Banner("Projects", RESUME_ICONS.globe) + items + '</div>';
+    }
+    const pubs = model.items.publications || [];
+    if (pubs.length) {
+        const items = pubs.map(x => '<div class="t10-entry">' +
+            '<div class="t10-entry-title">' + escapeHtml(x.title) + '</div>' +
+            (x.body ? '<div>' + escapeHtml(x.body) + '</div>' : "") +
+        '</div>').join("");
+        rightHtml += '<div class="t10-sec">' + t10Banner("Publications", RESUME_ICONS.globe) + items + '</div>';
+    }
+    const hobs = (model.lists.hobbies || []).filter(v => String(v || "").trim());
+    if (hobs.length) {
+        rightHtml += '<div class="t10-sec">' + t10Banner("Interest", RESUME_ICONS.globe) + rvBulletListHtml(hobs, "t10-bullets") + '</div>';
+    }
+
+    const sig = model.signature
+        ? '<div class="t10-sig-wrap">' +
+            '<div class="t10-sig-box">' +
+                '<span class="t10-sig-label">Signature:</span>' +
+                '<div>' +
+                    '<img class="t10-sig-img" src="' + escapeHtml(model.signature) + '" alt="Signature">' +
+                    '<div class="t10-sig-name">' + name + '</div>' +
+                '</div>' +
+            '</div>' +
+        '</div>'
+        : "";
+
+    return header +
+        '<div class="t10-columns">' +
+            '<div>' + leftHtml + '</div>' +
+            '<div>' + rightHtml + sig + '</div>' +
+        '</div>';
+}
+
+/* ---------- Template 11 (Sky Blue Pastel Two-Column Layout with Rail Timeline) ---------- */
+
+function renderTemplate11(model) {
+    const p = model.profile || {};
+    const name = escapeHtml(p.name || "");
+    const headline = escapeHtml(p.headline || "");
+
+    const photo = model.photo
+        ? '<div class="t11-photo-wrap"><img class="t11-photo" src="' + escapeHtml(model.photo) + '" alt=""></div>'
+        : '<div class="t11-photo-wrap"><div class="t11-photo-empty"></div></div>';
+
+    const header = '<div class="t11-top-line"></div>' +
+        '<header class="t11-header-center">' +
+            photo +
+            '<h1 class="t11-name">' + name + '</h1>' +
+            (headline ? '<div class="t11-headline">' + headline + '</div>' : "") +
+        '</header>';
+
+    function t11Banner(title, icon) {
+        return '<div class="t11-banner"><span>' + icon + '</span> ' + escapeHtml(title) + '</div>';
+    }
+
+    // Left Column: Contact Details, Summary, Skills, Languages, Activities, Award, Interest
+    let leftHtml = "";
+
+    const contactItems = [];
+    if (p.phone) contactItems.push('<div class="t11-contact-item"><span style="color:#75a7f8;">' + RESUME_ICONS.phone + '</span> ' + escapeHtml(p.phone) + '</div>');
+    if (p.email) contactItems.push('<div class="t11-contact-item"><span style="color:#75a7f8;">' + RESUME_ICONS.mail + '</span> ' + escapeHtml(p.email) + '</div>');
+    const loc = [p.address, p.city, p.state, p.pincode, p.country].filter(Boolean).join(", ");
+    if (loc) contactItems.push('<div class="t11-contact-item"><span style="color:#75a7f8;">' + RESUME_ICONS.pin + '</span> ' + escapeHtml(loc) + '</div>');
+    if (p.website_url) contactItems.push('<div class="t11-contact-item"><span style="color:#75a7f8;">' + RESUME_ICONS.globe + '</span> <a href="' + rvSafeHref(p.website_url) + '" target="_blank" rel="noopener">' + escapeHtml(p.website_url) + '</a></div>');
+    if (p.date_of_birth) contactItems.push('<div class="t11-contact-item"><span style="color:#75a7f8;">' + RESUME_ICONS.calendar + '</span> ' + escapeHtml(rvDate(p.date_of_birth) || p.date_of_birth) + '</div>');
+
+    if (contactItems.length) {
+        leftHtml += '<div class="t11-sec">' + t11Banner("Contact Details", RESUME_ICONS.phone) + '<div class="t11-contact-list">' + contactItems.join("") + '</div></div>';
+    }
+
+    if (model.summary) {
+        leftHtml += '<div class="t11-sec">' + t11Banner("Summary", RESUME_ICONS.globe) + '<div>' + escapeHtml(model.summary) + '</div></div>';
+    }
+
+    const skills = (model.lists.skills || []).filter(v => String(v || "").trim());
+    if (skills.length) {
+        leftHtml += '<div class="t11-sec">' + t11Banner("Skills", RESUME_ICONS.briefcase) + '<div class="t11-chips">' + skills.map(s => '<span class="t11-chip">' + escapeHtml(s) + '</span>').join("") + '</div></div>';
+    }
+
+    const langs = (model.lists.languages || []).filter(v => String(v || "").trim());
+    if (langs.length) {
+        leftHtml += '<div class="t11-sec">' + t11Banner("Languages", RESUME_ICONS.globe) + '<div class="t11-chips">' + langs.map(s => '<span class="t11-chip">' + escapeHtml(s) + '</span>').join("") + '</div></div>';
+    }
+
+    const acts = (model.lists.activities || []).filter(v => String(v || "").trim());
+    if (acts.length) {
+        leftHtml += '<div class="t11-sec">' + t11Banner("Activities", RESUME_ICONS.calendar) + '<div>' + escapeHtml(acts.join(", ")) + '</div></div>';
+    }
+
+    const awards = (model.lists.awards || []).filter(v => String(v || "").trim());
+    if (awards.length) {
+        leftHtml += '<div class="t11-sec">' + t11Banner("Award", RESUME_ICONS.calendar) + '<div>' + escapeHtml(awards.join(", ")) + '</div></div>';
+    }
+
+    const hobs = (model.lists.hobbies || []).filter(v => String(v || "").trim());
+    if (hobs.length) {
+        leftHtml += '<div class="t11-sec">' + t11Banner("Interest", RESUME_ICONS.globe) + rvBulletListHtml(hobs, "t11-bullets") + '</div>';
+    }
+
+    // Right Column: Experience (with timeline), Education (with timeline), Projects, Publications, Reference, Additional
+    let rightHtml = "";
+
+    const exp = model.items.experience || [];
+    if (exp.length) {
+        const items = exp.map(e => '<div class="t11-timeline-entry">' +
+            '<span class="t11-node"></span>' +
+            '<div class="t11-entry-head">' +
+                '<span class="t11-entry-title">' + escapeHtml(e.company) + '</span>' +
+                (e.meta ? '<span class="t11-entry-dates">' + escapeHtml(e.meta) + '</span>' : "") +
+            '</div>' +
+            (e.job_title ? '<div class="t11-entry-sub">' + escapeHtml(e.job_title) + '</div>' : "") +
+            (e.body ? '<div style="margin-top:1mm;">' + escapeHtml(e.body) + '</div>' : "") +
+        '</div>').join("");
+        rightHtml += '<div class="t11-sec">' + t11Banner("Experience", RESUME_ICONS.briefcase) + '<div class="t11-timeline">' + items + '</div></div>';
+    }
+
+    const edu = model.items.education || [];
+    if (edu.length) {
+        const items = edu.map(e => '<div class="t11-timeline-entry">' +
+            '<span class="t11-node"></span>' +
+            '<div class="t11-entry-head">' +
+                '<span class="t11-entry-title">' + escapeHtml(e.school) + '</span>' +
+                (e.meta ? '<span class="t11-entry-dates">' + escapeHtml(e.meta) + '</span>' : "") +
+            '</div>' +
+            (e.degree ? '<div class="t11-entry-sub">' + escapeHtml(e.degree) + '</div>' : "") +
+            (e.grade ? '<div class="t11-entry-dates" style="margin-top:0.5mm;">' + escapeHtml(e.grade) + '</div>' : "") +
+        '</div>').join("");
+        rightHtml += '<div class="t11-sec">' + t11Banner("Education", RESUME_ICONS.grad) + '<div class="t11-timeline">' + items + '</div></div>';
+    }
+
+    const projs = model.items.projects || [];
+    if (projs.length) {
+        const items = projs.map(x => '<div class="t11-timeline-entry">' +
+            '<div class="t11-entry-title">' + escapeHtml(x.title) + '</div>' +
+            (x.body ? '<div>' + escapeHtml(x.body) + '</div>' : "") +
+        '</div>').join("");
+        rightHtml += '<div class="t11-sec">' + t11Banner("Projects", RESUME_ICONS.globe) + items + '</div>';
+    }
+
+    const pubs = model.items.publications || [];
+    if (pubs.length) {
+        const items = pubs.map(x => '<div class="t11-timeline-entry">' +
+            '<div class="t11-entry-title">' + escapeHtml(x.title) + '</div>' +
+            (x.body ? '<div>' + escapeHtml(x.body) + '</div>' : "") +
+        '</div>').join("");
+        rightHtml += '<div class="t11-sec">' + t11Banner("Publications", RESUME_ICONS.globe) + items + '</div>';
+    }
+
+    const refs = model.items.references || [];
+    if (refs.length) {
+        const items = refs.map(r => '<div class="t11-timeline-entry">' +
+            '<div class="t11-entry-title">' + escapeHtml(r.name || r.title) + '</div>' +
+            (r.company ? '<div class="t11-entry-sub">' + escapeHtml(r.company) + '</div>' : "") +
+            (r.email ? '<div class="t11-entry-dates">' + escapeHtml(r.email) + '</div>' : "") +
+        '</div>').join("");
+        rightHtml += '<div class="t11-sec">' + t11Banner("Reference", RESUME_ICONS.pin) + items + '</div>';
+    }
+
+    if (model.additional) {
+        rightHtml += '<div class="t11-sec">' + t11Banner("Additional Information", RESUME_ICONS.globe) + '<div>' + escapeHtml(model.additional) + '</div></div>';
+    }
+
+    const sig = model.signature
+        ? '<div class="t11-sig-wrap">' +
+            '<div class="t11-sig-box">' +
+                '<span class="t11-sig-label">Signature:</span>' +
+                '<div>' +
+                    '<img class="t11-sig-img" src="' + escapeHtml(model.signature) + '" alt="Signature">' +
+                    '<div class="t11-sig-name">' + name + '</div>' +
+                '</div>' +
+            '</div>' +
+        '</div>'
+        : "";
+
+    return header +
+        '<div class="t11-columns">' +
+            '<div>' + leftHtml + '</div>' +
+            '<div>' + rightHtml + sig + '</div>' +
+        '</div>';
+}
+
+/* ---------- Template 12 (Dark Slate Banner & Minimalist Icon Rows) ---------- */
+
+function renderTemplate12(model) {
+    const p = model.profile || {};
+    const name = escapeHtml(p.name || "");
+    const headline = escapeHtml(p.headline || "");
+
+    const photo = model.photo
+        ? '<div class="t12-photo-wrap"><img class="t12-photo" src="' + escapeHtml(model.photo) + '" alt=""></div>'
+        : '<div class="t12-photo-wrap"><div class="t12-photo-empty"></div></div>';
+
+    const contactItems = [];
+    if (p.phone) contactItems.push('<div class="t12-contact-item"><span style="color:#cbd5e1;">' + RESUME_ICONS.phone + '</span> ' + escapeHtml(p.phone) + '</div>');
+    if (p.email) contactItems.push('<div class="t12-contact-item"><span style="color:#cbd5e1;">' + RESUME_ICONS.mail + '</span> ' + escapeHtml(p.email) + '</div>');
+    const loc = [p.address, p.city, p.state, p.pincode, p.country].filter(Boolean).join(", ");
+    if (loc) contactItems.push('<div class="t12-contact-item"><span style="color:#cbd5e1;">' + RESUME_ICONS.pin + '</span> ' + escapeHtml(loc) + '</div>');
+    if (p.website_url) contactItems.push('<div class="t12-contact-item"><span style="color:#cbd5e1;">' + RESUME_ICONS.globe + '</span> <a href="' + rvSafeHref(p.website_url) + '" target="_blank" rel="noopener" style="color:#e2e8f0;">' + escapeHtml(p.website_url) + '</a></div>');
+    if (p.date_of_birth) contactItems.push('<div class="t12-contact-item"><span style="color:#cbd5e1;">' + RESUME_ICONS.calendar + '</span> ' + escapeHtml(rvDate(p.date_of_birth) || p.date_of_birth) + '</div>');
+
+    const header = '<header class="t12-banner">' +
+        photo +
+        '<div class="t12-banner-info">' +
+            '<h1 class="t12-name">' + name + '</h1>' +
+            (headline ? '<div class="t12-headline">' + headline + '</div>' : "") +
+            '<div class="t12-contact-grid">' + contactItems.join("") + '</div>' +
+        '</div>' +
+    '</header>';
+
+    function t12Row(title, icon, content) {
+        if (!content) return "";
+        return '<div class="t12-row">' +
+            '<div class="t12-sec-head"><span class="t12-icon-circle">' + icon + '</span><span>' + escapeHtml(title) + '</span></div>' +
+            '<div class="t12-content">' + content + '</div>' +
+        '</div>';
+    }
+
+    let rowsHtml = "";
+
+    if (model.summary) {
+        rowsHtml += t12Row("Summary", RESUME_ICONS.globe, escapeHtml(model.summary));
+    }
+
+    const exp = model.items.experience || [];
+    if (exp.length) {
+        const items = exp.map(e => '<div class="t12-entry">' +
+            '<div class="t12-entry-head">' +
+                '<span class="t12-entry-title">' + escapeHtml(e.company) + '</span>' +
+                (e.meta ? '<span class="t12-entry-dates">' + escapeHtml(e.meta) + '</span>' : "") +
+            '</div>' +
+            (e.job_title ? '<div class="t12-entry-sub">' + escapeHtml(e.job_title) + '</div>' : "") +
+            (e.body ? '<div style="margin-top:1mm;">' + escapeHtml(e.body) + '</div>' : "") +
+        '</div>').join("");
+        rowsHtml += t12Row("Experience", RESUME_ICONS.briefcase, items);
+    }
+
+    const edu = model.items.education || [];
+    if (edu.length) {
+        const items = edu.map(e => '<div class="t12-entry">' +
+            '<div class="t12-entry-head">' +
+                '<span class="t12-entry-title">' + escapeHtml(e.school) + '</span>' +
+                (e.meta ? '<span class="t12-entry-dates">' + escapeHtml(e.meta) + '</span>' : "") +
+            '</div>' +
+            (e.degree ? '<div class="t12-entry-sub">' + escapeHtml(e.degree) + '</div>' : "") +
+            (e.grade ? '<div class="t12-entry-dates" style="margin-top:0.5mm;">' + escapeHtml(e.grade) + '</div>' : "") +
+        '</div>').join("");
+        rowsHtml += t12Row("Education", RESUME_ICONS.grad, items);
+    }
+
+    const skills = (model.lists.skills || []).filter(v => String(v || "").trim());
+    if (skills.length) {
+        rowsHtml += t12Row("Skills", RESUME_ICONS.briefcase, '<div style="display:flex;flex-wrap:wrap;gap:2mm 4mm;">' + skills.map(s => '<span>• ' + escapeHtml(s) + '</span>').join("") + '</div>');
+    }
+
+    const langs = (model.lists.languages || []).filter(v => String(v || "").trim());
+    if (langs.length) {
+        rowsHtml += t12Row("Languages", RESUME_ICONS.globe, '<div style="display:flex;flex-wrap:wrap;gap:2mm 4mm;">' + langs.map(s => '<span>• ' + escapeHtml(s) + '</span>').join("") + '</div>');
+    }
+
+    const acts = (model.lists.activities || []).filter(v => String(v || "").trim());
+    if (acts.length) {
+        rowsHtml += t12Row("Activities", RESUME_ICONS.calendar, escapeHtml(acts.join(", ")));
+    }
+
+    const projs = model.items.projects || [];
+    if (projs.length) {
+        const items = projs.map(x => '<div class="t12-entry">' +
+            '<div class="t12-entry-title">' + escapeHtml(x.title) + '</div>' +
+            (x.body ? '<div>' + escapeHtml(x.body) + '</div>' : "") +
+        '</div>').join("");
+        rowsHtml += t12Row("Projects", RESUME_ICONS.globe, items);
+    }
+
+    const pubs = model.items.publications || [];
+    if (pubs.length) {
+        const items = pubs.map(x => '<div class="t12-entry">' +
+            '<div class="t12-entry-title">' + escapeHtml(x.title) + '</div>' +
+            (x.body ? '<div>' + escapeHtml(x.body) + '</div>' : "") +
+        '</div>').join("");
+        rowsHtml += t12Row("Publications", RESUME_ICONS.globe, items);
+    }
+
+    const awards = (model.lists.awards || []).filter(v => String(v || "").trim());
+    if (awards.length) {
+        rowsHtml += t12Row("Award", RESUME_ICONS.calendar, escapeHtml(awards.join(", ")));
+    }
+
+    const hobs = (model.lists.hobbies || []).filter(v => String(v || "").trim());
+    if (hobs.length) {
+        rowsHtml += t12Row("Interest", RESUME_ICONS.globe, '<div style="display:flex;flex-wrap:wrap;gap:2mm 4mm;">' + hobs.map(s => '<span>• ' + escapeHtml(s) + '</span>').join("") + '</div>');
+    }
+
+    const refs = model.items.references || [];
+    if (refs.length) {
+        const items = refs.map(r => '<div class="t12-entry">' +
+            '<div class="t12-entry-title">' + escapeHtml(r.name || r.title) + '</div>' +
+            (r.company ? '<div class="t12-entry-sub">' + escapeHtml(r.company) + '</div>' : "") +
+            (r.email ? '<div class="t12-entry-dates">' + escapeHtml(r.email) + '</div>' : "") +
+        '</div>').join("");
+        rowsHtml += t12Row("Reference", RESUME_ICONS.pin, items);
+    }
+
+    if (model.additional) {
+        rowsHtml += t12Row("Additional Information", RESUME_ICONS.globe, escapeHtml(model.additional));
+    }
+
+    const sig = model.signature
+        ? '<div class="t12-sig-wrap">' +
+            '<div class="t12-sig-box">' +
+                '<span class="t12-sig-label">Signature:</span>' +
+                '<div>' +
+                    '<img class="t12-sig-img" src="' + escapeHtml(model.signature) + '" alt="Signature">' +
+                    '<div class="t12-sig-name">' + name + '</div>' +
+                '</div>' +
+            '</div>' +
+        '</div>'
+        : "";
+
+    return header + '<div class="t12-body">' + rowsHtml + sig + '</div>';
+}
+
+/* ---------- Template 13 (Cobalt Blue Inverted Right Sidebar) ---------- */
+
+function renderTemplate13(model) {
+    const p = model.profile || {};
+    const name = escapeHtml(p.name || "");
+    const headline = escapeHtml(p.headline || "");
+
+    const photo = model.photo
+        ? '<div class="t13-photo-wrap"><img class="t13-photo" src="' + escapeHtml(model.photo) + '" alt=""></div>'
+        : '<div class="t13-photo-wrap"><div class="t13-photo-empty"></div></div>';
+
+    const contactItems = [];
+    if (p.phone) contactItems.push('<div class="t13-contact-item"><span style="color:#dbeafe;">' + RESUME_ICONS.phone + '</span> ' + escapeHtml(p.phone) + '</div>');
+    if (p.email) contactItems.push('<div class="t13-contact-item"><span style="color:#dbeafe;">' + RESUME_ICONS.mail + '</span> ' + escapeHtml(p.email) + '</div>');
+    const loc = [p.address, p.city, p.state, p.pincode, p.country].filter(Boolean).join(", ");
+    if (loc) contactItems.push('<div class="t13-contact-item"><span style="color:#dbeafe;">' + RESUME_ICONS.pin + '</span> ' + escapeHtml(loc) + '</div>');
+    if (p.website_url) contactItems.push('<div class="t13-contact-item"><span style="color:#dbeafe;">' + RESUME_ICONS.globe + '</span> <a href="' + rvSafeHref(p.website_url) + '" target="_blank" rel="noopener" style="color:#ffffff;">' + escapeHtml(p.website_url) + '</a></div>');
+    if (p.date_of_birth) contactItems.push('<div class="t13-contact-item"><span style="color:#dbeafe;">' + RESUME_ICONS.calendar + '</span> ' + escapeHtml(rvDate(p.date_of_birth) || p.date_of_birth) + '</div>');
+
+    const card = '<div class="t13-card">' +
+        photo +
+        '<h1 class="t13-name">' + name + '</h1>' +
+        (headline ? '<div class="t13-headline">' + headline + '</div>' : "") +
+        (contactItems.length ? '<div class="t13-contact-list">' + contactItems.join("") + '</div>' : "") +
+    '</div>';
+
+    function t13Banner(title, icon) {
+        return '<div class="t13-banner"><span>' + icon + '</span> ' + escapeHtml(title) + '</div>';
+    }
+
+    // Right Sidebar Sections: Top Card, Summary, Skills, Languages, Activities, Interest
+    let sideHtml = card;
+    if (model.summary) {
+        sideHtml += '<div class="t13-sec">' + t13Banner("Summary", RESUME_ICONS.globe) + '<div>' + escapeHtml(model.summary) + '</div></div>';
+    }
+    const skills = (model.lists.skills || []).filter(v => String(v || "").trim());
+    if (skills.length) {
+        sideHtml += '<div class="t13-sec">' + t13Banner("Skills", RESUME_ICONS.briefcase) + rvBulletListHtml(skills, "t13-bullets") + '</div>';
+    }
+    const langs = (model.lists.languages || []).filter(v => String(v || "").trim());
+    if (langs.length) {
+        sideHtml += '<div class="t13-sec">' + t13Banner("Languages", RESUME_ICONS.globe) + rvBulletListHtml(langs, "t13-bullets") + '</div>';
+    }
+    const acts = (model.lists.activities || []).filter(v => String(v || "").trim());
+    if (acts.length) {
+        sideHtml += '<div class="t13-sec">' + t13Banner("Activities", RESUME_ICONS.calendar) + '<div>' + escapeHtml(acts.join(", ")) + '</div></div>';
+    }
+    const hobs = (model.lists.hobbies || []).filter(v => String(v || "").trim());
+    if (hobs.length) {
+        sideHtml += '<div class="t13-sec">' + t13Banner("Interest", RESUME_ICONS.globe) + rvBulletListHtml(hobs, "t13-bullets") + '</div>';
+    }
+
+    // Left Main Column: Experience, Education, Projects, Award, Publications, Reference, Additional Information
+    let mainHtml = "";
+    const exp = model.items.experience || [];
+    if (exp.length) {
+        const items = exp.map(e => '<div class="t13-entry">' +
+            '<div class="t13-entry-head">' +
+                '<span class="t13-entry-title">' + escapeHtml(e.company) + '</span>' +
+                (e.meta ? '<span class="t13-entry-dates">' + escapeHtml(e.meta) + '</span>' : "") +
+            '</div>' +
+            (e.job_title ? '<div class="t13-entry-sub">' + escapeHtml(e.job_title) + '</div>' : "") +
+            (e.body ? '<div style="margin-top:1mm;">' + escapeHtml(e.body) + '</div>' : "") +
+        '</div>').join("");
+        mainHtml += '<div class="t13-sec">' + t13Banner("Experience", RESUME_ICONS.briefcase) + items + '</div>';
+    }
+
+    const edu = model.items.education || [];
+    if (edu.length) {
+        const items = edu.map(e => '<div class="t13-entry">' +
+            '<div class="t13-entry-head">' +
+                '<span class="t13-entry-title">' + escapeHtml(e.school) + '</span>' +
+                (e.meta ? '<span class="t13-entry-dates">' + escapeHtml(e.meta) + '</span>' : "") +
+            '</div>' +
+            (e.degree ? '<div class="t13-entry-sub">' + escapeHtml(e.degree) + '</div>' : "") +
+            (e.grade ? '<div class="t13-entry-dates" style="margin-top:0.5mm;">' + escapeHtml(e.grade) + '</div>' : "") +
+        '</div>').join("");
+        mainHtml += '<div class="t13-sec">' + t13Banner("Education", RESUME_ICONS.grad) + items + '</div>';
+    }
+
+    const projs = model.items.projects || [];
+    if (projs.length) {
+        const items = projs.map(x => '<div class="t13-entry">' +
+            '<div class="t13-entry-title">' + escapeHtml(x.title) + '</div>' +
+            (x.body ? '<div>' + escapeHtml(x.body) + '</div>' : "") +
+        '</div>').join("");
+        mainHtml += '<div class="t13-sec">' + t13Banner("Projects", RESUME_ICONS.globe) + items + '</div>';
+    }
+
+    const awards = (model.lists.awards || []).filter(v => String(v || "").trim());
+    if (awards.length) {
+        mainHtml += '<div class="t13-sec">' + t13Banner("Award", RESUME_ICONS.calendar) + '<div>' + escapeHtml(awards.join(", ")) + '</div></div>';
+    }
+
+    const pubs = model.items.publications || [];
+    if (pubs.length) {
+        const items = pubs.map(x => '<div class="t13-entry">' +
+            '<div class="t13-entry-title">' + escapeHtml(x.title) + '</div>' +
+            (x.body ? '<div>' + escapeHtml(x.body) + '</div>' : "") +
+        '</div>').join("");
+        mainHtml += '<div class="t13-sec">' + t13Banner("Publications", RESUME_ICONS.globe) + items + '</div>';
+    }
+
+    const refs = model.items.references || [];
+    if (refs.length) {
+        const items = refs.map(r => '<div class="t13-entry">' +
+            '<div class="t13-entry-title">' + escapeHtml(r.name || r.title) + '</div>' +
+            (r.company ? '<div class="t13-entry-sub">' + escapeHtml(r.company) + '</div>' : "") +
+            (r.email ? '<div class="t13-entry-dates">' + escapeHtml(r.email) + '</div>' : "") +
+        '</div>').join("");
+        mainHtml += '<div class="t13-sec">' + t13Banner("Reference", RESUME_ICONS.pin) + items + '</div>';
+    }
+
+    if (model.additional) {
+        mainHtml += '<div class="t13-sec">' + t13Banner("Additional Information", RESUME_ICONS.globe) + '<div>' + escapeHtml(model.additional) + '</div></div>';
+    }
+
+    const sig = model.signature
+        ? '<div class="t13-sig-wrap">' +
+            '<div class="t13-sig-box">' +
+                '<span class="t13-sig-label">Signature:</span>' +
+                '<div>' +
+                    '<img class="t13-sig-img" src="' + escapeHtml(model.signature) + '" alt="Signature">' +
+                    '<div class="t13-sig-name">' + name + '</div>' +
+                '</div>' +
+            '</div>' +
+        '</div>'
+        : "";
+
+    return '<div class="t13-layout">' +
+        '<div>' + mainHtml + sig + '</div>' +
+        '<div>' + sideHtml + '</div>' +
+    '</div>';
+}
+
 function renderTemplateBody(def, model) {
-    if (def && def.id === "template-2") {
-        return renderTemplate2(model);
+    if (!def) return renderTemplate1(model);
+    switch (def.id) {
+        case "modern-blue": return renderTemplate3(model);
+        case "executive": return renderTemplate1(model);
+        case "early-career": return renderTemplate2(model);
+        case "ats": return renderTemplate7(model);
+        case "template-1": return renderTemplate1(model);
+        case "template-2": return renderTemplate2(model);
+        case "template-3": return renderTemplate3(model);
+        case "template-4": return renderTemplate4(model);
+        case "template-5": return renderTemplate5(model);
+        case "template-6": return renderTemplate6(model);
+        case "template-7": return renderTemplate7(model);
+        case "template-8": return renderTemplate8(model);
+        case "template-9": return renderTemplate9(model);
+        case "template-10": return renderTemplate10(model);
+        case "template-11": return renderTemplate11(model);
+        case "template-12": return renderTemplate12(model);
+        case "template-13": return renderTemplate13(model);
+        default: return renderTemplate1(model);
     }
-    if (def && def.id === "template-3") {
-        return renderTemplate3(model);
-    }
-    return renderTemplate1(model);
 }
 
 function renderResumeTemplatePicker() {
@@ -981,6 +2339,10 @@ function renderResumeTemplatePicker() {
 /* Presentation-only switch. Reads resumeState, writes no resume field, and
    calls no API, so the user's resume is untouched. */
 function selectResumeTemplate(id) {
+    if (id === "modern-blue") id = "template-3";
+    if (id === "executive") id = "template-1";
+    if (id === "early-career") id = "template-2";
+    if (id === "ats") id = "template-7";
     if (RESUME_TEMPLATE_IDS.indexOf(id) === -1) return;
     resumeState.template = id;
     renderResumeTemplatePicker();

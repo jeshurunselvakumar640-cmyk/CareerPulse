@@ -18,7 +18,7 @@
             }
         }
     </script>
-    <link rel="stylesheet" href="/static/styles/dashboard.css">
+    <link rel="stylesheet" href="/static/styles/dashboard.css?v=20261004_v13">
 
     <!-- Progressive Web App -->
     <link rel="manifest" href="/manifest.webmanifest">
@@ -110,6 +110,25 @@
             border: 1px solid rgba(180, 83, 9, 0.4);
         }
     </style>
+    <!-- Auto-purge stale PWA caches from older builds -->
+    <script>
+        (function() {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then(function(regs) {
+                    for (var r of regs) { r.update(); }
+                });
+            }
+            if ('caches' in window) {
+                caches.keys().then(function(keys) {
+                    keys.forEach(function(k) {
+                        if (k.startsWith('careerpulse-static-') && k !== 'careerpulse-static-v13') {
+                            caches.delete(k);
+                        }
+                    });
+                });
+            }
+        })();
+    </script>
 </head>
 
 <body
@@ -1223,10 +1242,10 @@
                     <div id="resumeTemplatePickerWrap" class="mb-4">
                         <div class="flex items-baseline justify-between gap-2 mb-2">
                             <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Template</p>
-                            <p class="text-[10px] text-slate-500">Same resume data, three layouts</p>
+                            <p class="text-[10px] text-slate-500">Same resume data, 13 layouts</p>
                         </div>
                         <div id="resumeTemplatePicker" role="group" aria-label="Resume template"
-                            class="grid grid-cols-1 sm:grid-cols-3 gap-3"></div>
+                            class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
                     </div>
                     <div id="resumePreviewBody" class="resume-a4"></div>
                 </div>
@@ -1412,7 +1431,7 @@
     </div>
 
     <!-- Frontend Script -->
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=20261004_v13"></script>
 </body>
 
 </html>

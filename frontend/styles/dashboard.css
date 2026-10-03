@@ -799,6 +799,1031 @@
     text-align: center;
 }
 
+/* ===================================================================
+   TEMPLATE 4 (Golden Amber Sidebar + Cream Body with Timeline Pins)
+   =================================================================== */
+.resume-a4[data-template="template-4"] {
+    padding: 0;
+    overflow: hidden;
+    position: relative;
+    background: #fdeacb;
+    display: flex;
+    align-items: stretch;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+.resume-a4[data-template="template-4"] .t4-sidebar {
+    flex: 0 0 34%;
+    width: 34%;
+    background-color: #f19200;
+    padding: 8mm 6mm 10mm 7mm;
+    color: #111827;
+    display: flex;
+    flex-direction: column;
+}
+.resume-a4[data-template="template-4"] .t4-photo-wrap {
+    width: 28mm;
+    height: 33mm;
+    border-radius: 4px;
+    margin: 0 auto 5mm auto;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    background: rgba(0,0,0,0.08);
+    flex-shrink: 0;
+}
+.resume-a4[data-template="template-4"] .t4-photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.resume-a4[data-template="template-4"] .t4-photo-empty {
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.1);
+}
+.resume-a4[data-template="template-4"] .t4-side-sec {
+    margin-bottom: 4.5mm;
+}
+.resume-a4[data-template="template-4"] .t4-side-title {
+    font-size: 10pt;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: #111827;
+    margin-bottom: 2mm;
+    letter-spacing: 0.5px;
+}
+.resume-a4[data-template="template-4"] .t4-contact-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 2mm;
+    font-size: 8pt;
+    color: #1f2937;
+    margin-bottom: 1.8mm;
+    line-height: 1.3;
+    word-break: break-word;
+}
+.resume-a4[data-template="template-4"] .t4-contact-icon {
+    flex-shrink: 0;
+    width: 3.5mm;
+    height: 3.5mm;
+    margin-top: 0.2mm;
+    color: #111827;
+}
+.resume-a4[data-template="template-4"] .t4-contact-row a {
+    color: #111827;
+    text-decoration: underline;
+}
+.resume-a4[data-template="template-4"] .t4-side-text {
+    font-size: 8pt;
+    color: #1f2937;
+    line-height: 1.38;
+    white-space: pre-wrap;
+}
+.resume-a4[data-template="template-4"] .t4-list {
+    margin: 0;
+    padding-left: 4mm;
+    list-style-type: disc;
+}
+.resume-a4[data-template="template-4"] .t4-list li {
+    font-size: 8pt;
+    color: #1f2937;
+    margin-bottom: 0.8mm;
+}
+.resume-a4[data-template="template-4"] .t4-main {
+    flex: 1 1 66%;
+    min-width: 0;
+    background-color: #fdeacb;
+    padding: 8mm 9mm 8mm 9mm;
+    display: flex;
+    flex-direction: column;
+}
+.resume-a4[data-template="template-4"] .t4-header {
+    text-align: center;
+    margin-bottom: 3mm;
+}
+.resume-a4[data-template="template-4"] .t4-name {
+    font-size: 21pt;
+    font-weight: 800;
+    color: #111827;
+    line-height: 1.1;
+    margin: 0;
+}
+.resume-a4[data-template="template-4"] .t4-headline {
+    font-size: 10pt;
+    color: #4b5563;
+    margin-top: 1mm;
+}
+.resume-a4[data-template="template-4"] .t4-summary {
+    font-size: 8.5pt;
+    color: #374151;
+    line-height: 1.4;
+    text-align: center;
+    margin: 3mm 0 4mm 0;
+    white-space: pre-wrap;
+}
+.resume-a4[data-template="template-4"] .t4-sec-divider {
+    text-align: center;
+    position: relative;
+    margin: 4mm 0 3mm 0;
+}
+.resume-a4[data-template="template-4"] .t4-sec-divider::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 10%;
+    right: 10%;
+    height: 1px;
+    background: #e2b980;
+    z-index: 1;
+}
+.resume-a4[data-template="template-4"] .t4-sec-title {
+    position: relative;
+    z-index: 2;
+    background: #fdeacb;
+    padding: 0 4mm;
+    font-size: 9.5pt;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #111827;
+}
+.resume-a4[data-template="template-4"] .t4-timeline {
+    position: relative;
+    margin-bottom: 2mm;
+}
+.resume-a4[data-template="template-4"] .t4-item {
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 3.5mm;
+    break-inside: avoid;
+}
+.resume-a4[data-template="template-4"] .t4-item-info {
+    flex: 1 1 65%;
+    padding-right: 3mm;
+}
+.resume-a4[data-template="template-4"] .t4-item-title {
+    font-size: 9.5pt;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: #111827;
+}
+.resume-a4[data-template="template-4"] .t4-item-sub {
+    font-size: 8.5pt;
+    color: #374151;
+    margin-top: 0.4mm;
+}
+.resume-a4[data-template="template-4"] .t4-item-body {
+    font-size: 8pt;
+    color: #4b5563;
+    line-height: 1.35;
+    margin-top: 0.8mm;
+    white-space: pre-wrap;
+}
+.resume-a4[data-template="template-4"] .t4-item-rail {
+    flex: 0 0 35%;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+    position: relative;
+}
+.resume-a4[data-template="template-4"] .t4-item-date {
+    font-size: 8pt;
+    color: #374151;
+    margin-right: 4mm;
+    text-align: right;
+    white-space: nowrap;
+}
+.resume-a4[data-template="template-4"] .t4-item-pin {
+    width: 2.2mm;
+    height: 2.2mm;
+    border-radius: 50%;
+    background: #f19200;
+    margin-top: 1mm;
+    flex-shrink: 0;
+}
+.resume-a4[data-template="template-4"] .t4-link {
+    font-size: 8pt;
+    margin-top: 0.4mm;
+    word-break: break-all;
+}
+.resume-a4[data-template="template-4"] .t4-link a {
+    color: #b45309;
+    text-decoration: none;
+}
+.resume-a4[data-template="template-4"] .t4-sig {
+    margin-top: 4mm;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    break-inside: avoid;
+}
+.resume-a4[data-template="template-4"] .t4-sig img {
+    max-height: 14mm;
+    max-width: 48mm;
+    object-fit: contain;
+}
+.resume-a4[data-template="template-4"] .t4-sig-line {
+    font-size: 7.5pt;
+    color: #78350f;
+    border-top: 1px solid #d4a76a;
+    margin-top: 1mm;
+    padding-top: 0.5mm;
+    width: 45mm;
+    text-align: center;
+}
+
+/* ===================================================================
+   TEMPLATE 5 (Lilac / Purple Arched Sidebar + Clean White Body)
+   =================================================================== */
+.resume-a4[data-template="template-5"] {
+    padding: 0;
+    overflow: hidden;
+    position: relative;
+    background: #ffffff;
+    display: flex;
+    align-items: stretch;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+.resume-a4[data-template="template-5"] .t5-sidebar {
+    flex: 0 0 35%;
+    width: 35%;
+    background-color: #977cb3;
+    padding: 6mm 6mm 10mm 7mm;
+    color: #ffffff;
+    display: flex;
+    flex-direction: column;
+}
+.resume-a4[data-template="template-5"] .t5-arch-top {
+    width: 100%;
+    border-top-left-radius: 32mm;
+    border-top-right-radius: 32mm;
+    background-color: #886ea4;
+    padding: 5mm 0 3mm 0;
+    display: flex;
+    justify-content: center;
+    margin-bottom: 4mm;
+}
+.resume-a4[data-template="template-5"] .t5-photo-wrap {
+    width: 28mm;
+    height: 28mm;
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.9);
+    overflow: hidden;
+    background: rgba(255,255,255,0.2);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+}
+.resume-a4[data-template="template-5"] .t5-photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.resume-a4[data-template="template-5"] .t5-photo-empty {
+    width: 100%;
+    height: 100%;
+    background: rgba(255,255,255,0.3);
+}
+.resume-a4[data-template="template-5"] .t5-side-sec {
+    margin-bottom: 4.5mm;
+}
+.resume-a4[data-template="template-5"] .t5-side-title {
+    font-size: 10pt;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: #ffffff;
+    margin-bottom: 2mm;
+    letter-spacing: 0.5px;
+}
+.resume-a4[data-template="template-5"] .t5-contact-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 2mm;
+    font-size: 8pt;
+    color: #f3e8ff;
+    margin-bottom: 1.8mm;
+    line-height: 1.32;
+    word-break: break-word;
+}
+.resume-a4[data-template="template-5"] .t5-contact-icon {
+    flex-shrink: 0;
+    width: 3.5mm;
+    height: 3.5mm;
+    margin-top: 0.2mm;
+    color: #ffffff;
+}
+.resume-a4[data-template="template-5"] .t5-contact-row a {
+    color: #ffffff;
+    text-decoration: underline;
+}
+.resume-a4[data-template="template-5"] .t5-side-text {
+    font-size: 8pt;
+    color: #f3e8ff;
+    line-height: 1.38;
+    white-space: pre-wrap;
+}
+.resume-a4[data-template="template-5"] .t5-list {
+    margin: 0;
+    padding-left: 4mm;
+    list-style-type: disc;
+}
+.resume-a4[data-template="template-5"] .t5-list li {
+    font-size: 8pt;
+    color: #f3e8ff;
+    margin-bottom: 0.8mm;
+}
+.resume-a4[data-template="template-5"] .t5-main {
+    flex: 1 1 65%;
+    min-width: 0;
+    background: #ffffff;
+    padding: 8mm 9mm 8mm 9mm;
+    display: flex;
+    flex-direction: column;
+}
+.resume-a4[data-template="template-5"] .t5-header {
+    margin-bottom: 4mm;
+}
+.resume-a4[data-template="template-5"] .t5-name {
+    font-size: 20pt;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: #7b6697;
+    line-height: 1.1;
+    margin: 0;
+    letter-spacing: 0.5px;
+}
+.resume-a4[data-template="template-5"] .t5-headline {
+    font-size: 10pt;
+    font-weight: 500;
+    color: #374151;
+    margin-top: 1mm;
+}
+.resume-a4[data-template="template-5"] .t5-head-line {
+    height: 1px;
+    background: #d1d5db;
+    margin: 3mm 0;
+}
+.resume-a4[data-template="template-5"] .t5-summary {
+    font-size: 8.5pt;
+    color: #374151;
+    line-height: 1.4;
+    white-space: pre-wrap;
+}
+.resume-a4[data-template="template-5"] .t5-sec {
+    margin-bottom: 4.5mm;
+    break-inside: avoid;
+}
+.resume-a4[data-template="template-5"] .t5-sec-title {
+    font-size: 10.5pt;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: #7b6697;
+    margin-bottom: 2mm;
+    letter-spacing: 0.8px;
+}
+.resume-a4[data-template="template-5"] .t5-item {
+    margin-bottom: 3.2mm;
+    break-inside: avoid;
+}
+.resume-a4[data-template="template-5"] .t5-item-title {
+    font-size: 9.5pt;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: #111827;
+}
+.resume-a4[data-template="template-5"] .t5-item-sub {
+    font-size: 8.5pt;
+    color: #374151;
+    margin-top: 0.3mm;
+}
+.resume-a4[data-template="template-5"] .t5-item-meta {
+    font-size: 8pt;
+    color: #6b7280;
+    margin-top: 0.3mm;
+}
+.resume-a4[data-template="template-5"] .t5-item-body {
+    font-size: 8.5pt;
+    color: #4b5563;
+    line-height: 1.38;
+    margin-top: 0.8mm;
+    white-space: pre-wrap;
+}
+.resume-a4[data-template="template-5"] .t5-link {
+    font-size: 8pt;
+    margin-top: 0.4mm;
+    word-break: break-all;
+}
+.resume-a4[data-template="template-5"] .t5-link a {
+    color: #7b6697;
+    text-decoration: none;
+}
+.resume-a4[data-template="template-5"] .t5-sig {
+    margin-top: 4mm;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    break-inside: avoid;
+}
+.resume-a4[data-template="template-5"] .t5-sig img {
+    max-height: 14mm;
+    max-width: 48mm;
+    object-fit: contain;
+}
+.resume-a4[data-template="template-5"] .t5-sig-line {
+    font-size: 7.5pt;
+    color: #7b6697;
+    border-top: 1px solid #c4b5fd;
+    margin-top: 1mm;
+    padding-top: 0.5mm;
+    width: 45mm;
+    text-align: center;
+}
+
+/* ===================================================================
+   TEMPLATE 6 (Dark Slate Sidebar + Right Vertical Timeline)
+   =================================================================== */
+.resume-a4[data-template="template-6"] {
+    padding: 0;
+    overflow: hidden;
+    position: relative;
+    background: #ffffff;
+    display: flex;
+    align-items: stretch;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+.resume-a4[data-template="template-6"] .t6-sidebar {
+    flex: 0 0 33%;
+    width: 33%;
+    background-color: #3a4153;
+    padding: 8mm 6mm 10mm 7mm;
+    color: #ffffff;
+    display: flex;
+    flex-direction: column;
+}
+.resume-a4[data-template="template-6"] .t6-photo-wrap {
+    width: 28mm;
+    height: 28mm;
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.7);
+    margin: 0 auto 5mm auto;
+    overflow: hidden;
+    background: rgba(255,255,255,0.2);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.25);
+    flex-shrink: 0;
+}
+.resume-a4[data-template="template-6"] .t6-photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.resume-a4[data-template="template-6"] .t6-photo-empty {
+    width: 100%;
+    height: 100%;
+    background: rgba(255,255,255,0.2);
+}
+.resume-a4[data-template="template-6"] .t6-side-sec {
+    margin-bottom: 4.5mm;
+}
+.resume-a4[data-template="template-6"] .t6-side-title {
+    font-size: 10pt;
+    font-weight: 700;
+    color: #ffffff;
+    border-bottom: 1px solid rgba(255,255,255,0.3);
+    padding-bottom: 1mm;
+    margin-bottom: 2mm;
+}
+.resume-a4[data-template="template-6"] .t6-contact-row {
+    font-size: 8pt;
+    color: #e2e8f0;
+    margin-bottom: 2mm;
+    line-height: 1.32;
+    word-break: break-word;
+}
+.resume-a4[data-template="template-6"] .t6-contact-label {
+    font-weight: 700;
+    color: #ffffff;
+    display: block;
+}
+.resume-a4[data-template="template-6"] .t6-contact-row a {
+    color: #93c5fd;
+    text-decoration: none;
+}
+.resume-a4[data-template="template-6"] .t6-side-text {
+    font-size: 8pt;
+    color: #e2e8f0;
+    line-height: 1.38;
+    white-space: pre-wrap;
+}
+.resume-a4[data-template="template-6"] .t6-list {
+    margin: 0;
+    padding-left: 4mm;
+    list-style-type: disc;
+}
+.resume-a4[data-template="template-6"] .t6-list li {
+    font-size: 8pt;
+    color: #e2e8f0;
+    margin-bottom: 0.8mm;
+}
+.resume-a4[data-template="template-6"] .t6-main {
+    flex: 1 1 67%;
+    min-width: 0;
+    background: #ffffff;
+    padding: 8mm 9mm 8mm 9mm;
+    display: flex;
+    flex-direction: column;
+}
+.resume-a4[data-template="template-6"] .t6-header {
+    margin-bottom: 4mm;
+}
+.resume-a4[data-template="template-6"] .t6-name {
+    font-size: 21pt;
+    font-weight: 800;
+    color: #111827;
+    line-height: 1.1;
+    margin: 0;
+}
+.resume-a4[data-template="template-6"] .t6-headline {
+    font-size: 10.5pt;
+    font-weight: 600;
+    color: #4b5563;
+    margin-top: 1mm;
+}
+.resume-a4[data-template="template-6"] .t6-summary {
+    font-size: 8.5pt;
+    color: #374151;
+    line-height: 1.4;
+    margin-top: 2.5mm;
+    white-space: pre-wrap;
+}
+.resume-a4[data-template="template-6"] .t6-sec {
+    margin-bottom: 4.5mm;
+    break-inside: avoid;
+}
+.resume-a4[data-template="template-6"] .t6-sec-title {
+    font-size: 11pt;
+    font-weight: 700;
+    color: #111827;
+    border-bottom: 1.5px solid #4b5563;
+    padding-bottom: 0.8mm;
+    margin-bottom: 3mm;
+}
+.resume-a4[data-template="template-6"] .t6-timeline-item {
+    position: relative;
+    padding-left: 5mm;
+    margin-bottom: 3.5mm;
+    border-left: 1.5px solid #cbd5e1;
+    break-inside: avoid;
+}
+.resume-a4[data-template="template-6"] .t6-node {
+    position: absolute;
+    left: -2.2mm;
+    top: 0.8mm;
+    width: 3mm;
+    height: 3mm;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 1.5px solid #64748b;
+}
+.resume-a4[data-template="template-6"] .t6-item-date {
+    font-size: 8pt;
+    color: #64748b;
+    font-weight: 600;
+}
+.resume-a4[data-template="template-6"] .t6-item-title {
+    font-size: 9.5pt;
+    font-weight: 700;
+    color: #111827;
+    margin-top: 0.2mm;
+}
+.resume-a4[data-template="template-6"] .t6-item-sub {
+    font-size: 8.5pt;
+    color: #374151;
+    margin-top: 0.3mm;
+}
+.resume-a4[data-template="template-6"] .t6-item-body {
+    font-size: 8pt;
+    color: #4b5563;
+    line-height: 1.35;
+    margin-top: 0.8mm;
+    white-space: pre-wrap;
+}
+.resume-a4[data-template="template-6"] .t6-item-plain {
+    margin-bottom: 3mm;
+    break-inside: avoid;
+}
+.resume-a4[data-template="template-6"] .t6-link {
+    font-size: 8pt;
+    margin-top: 0.4mm;
+    word-break: break-all;
+}
+.resume-a4[data-template="template-6"] .t6-link a {
+    color: #2563eb;
+    text-decoration: none;
+}
+.resume-a4[data-template="template-6"] .t6-sig {
+    margin-top: 4mm;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    break-inside: avoid;
+}
+.resume-a4[data-template="template-6"] .t6-sig img {
+    max-height: 14mm;
+    max-width: 48mm;
+    object-fit: contain;
+}
+.resume-a4[data-template="template-6"] .t6-sig-line {
+    font-size: 7.5pt;
+    color: #64748b;
+    border-top: 1px solid #cbd5e1;
+    margin-top: 1mm;
+    padding-top: 0.5mm;
+    width: 45mm;
+    text-align: center;
+}
+
+/* ===================================================================
+   TEMPLATE 7 (Minimalist Grid Rows with Icons and Divider Lines)
+   =================================================================== */
+.resume-a4[data-template="template-7"] {
+    padding: 8mm 12mm 10mm 12mm;
+    background: #ffffff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #111827;
+}
+.resume-a4[data-template="template-7"] .t7-top-bar {
+    height: 3px;
+    background: #374151;
+    margin-bottom: 5mm;
+}
+.resume-a4[data-template="template-7"] .t7-header {
+    display: flex;
+    gap: 6mm;
+    align-items: center;
+    margin-bottom: 5mm;
+}
+.resume-a4[data-template="template-7"] .t7-photo-wrap {
+    width: 25mm;
+    height: 28mm;
+    border: 1px solid #d1d5db;
+    border-radius: 3px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+.resume-a4[data-template="template-7"] .t7-photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.resume-a4[data-template="template-7"] .t7-photo-empty {
+    width: 100%;
+    height: 100%;
+    background: #f3f4f6;
+}
+.resume-a4[data-template="template-7"] .t7-header-info {
+    flex: 1;
+    min-width: 0;
+}
+.resume-a4[data-template="template-7"] .t7-name {
+    font-size: 20pt;
+    font-weight: 800;
+    color: #111827;
+    margin: 0;
+    line-height: 1.1;
+}
+.resume-a4[data-template="template-7"] .t7-headline {
+    font-size: 10pt;
+    color: #4b5563;
+    margin-top: 1mm;
+}
+.resume-a4[data-template="template-7"] .t7-header-contact {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2mm 5mm;
+    margin-top: 2.5mm;
+    font-size: 8pt;
+    color: #4b5563;
+}
+.resume-a4[data-template="template-7"] .t7-contact-item {
+    display: flex;
+    align-items: center;
+    gap: 1.5mm;
+}
+.resume-a4[data-template="template-7"] .t7-contact-item svg {
+    width: 3.2mm;
+    height: 3.2mm;
+    color: #4b5563;
+}
+.resume-a4[data-template="template-7"] .t7-contact-item a {
+    color: #2563eb;
+    text-decoration: none;
+}
+.resume-a4[data-template="template-7"] .t7-row {
+    display: flex;
+    border-top: 1px solid #e5e7eb;
+    padding: 3mm 0;
+    break-inside: avoid;
+}
+.resume-a4[data-template="template-7"] .t7-row-label {
+    flex: 0 0 24%;
+    width: 24%;
+    display: flex;
+    align-items: flex-start;
+    gap: 2mm;
+    font-size: 8.5pt;
+    font-weight: 700;
+    color: #1f2937;
+    padding-top: 0.5mm;
+}
+.resume-a4[data-template="template-7"] .t7-row-icon {
+    width: 3.5mm;
+    height: 3.5mm;
+    color: #6b7280;
+    flex-shrink: 0;
+}
+.resume-a4[data-template="template-7"] .t7-row-content {
+    flex: 1 1 76%;
+    min-width: 0;
+    font-size: 8.5pt;
+    color: #374151;
+}
+.resume-a4[data-template="template-7"] .t7-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.8mm;
+}
+.resume-a4[data-template="template-7"] .t7-chip {
+    border: 1px solid #d1d5db;
+    border-radius: 3px;
+    padding: 0.6mm 2.2mm;
+    font-size: 7.5pt;
+    color: #374151;
+    background: #ffffff;
+}
+.resume-a4[data-template="template-7"] .t7-item {
+    margin-bottom: 2.5mm;
+}
+.resume-a4[data-template="template-7"] .t7-item-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+.resume-a4[data-template="template-7"] .t7-item-title {
+    font-weight: 700;
+    font-size: 8.5pt;
+    color: #111827;
+}
+.resume-a4[data-template="template-7"] .t7-item-meta {
+    font-size: 7.5pt;
+    color: #6b7280;
+    white-space: nowrap;
+}
+.resume-a4[data-template="template-7"] .t7-item-sub {
+    font-size: 8pt;
+    color: #4b5563;
+    margin-top: 0.2mm;
+}
+.resume-a4[data-template="template-7"] .t7-item-body {
+    font-size: 8pt;
+    color: #4b5563;
+    line-height: 1.35;
+    margin-top: 0.5mm;
+    white-space: pre-wrap;
+}
+.resume-a4[data-template="template-7"] .t7-sig-container {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 4mm;
+    padding-top: 2mm;
+}
+.resume-a4[data-template="template-7"] .t7-sig-box {
+    display: flex;
+    align-items: flex-end;
+    gap: 3mm;
+}
+.resume-a4[data-template="template-7"] .t7-sig-text {
+    font-size: 8.5pt;
+    font-weight: 700;
+    color: #111827;
+}
+.resume-a4[data-template="template-7"] .t7-sig-img-wrap {
+    text-align: center;
+}
+.resume-a4[data-template="template-7"] .t7-sig-img-wrap img {
+    max-height: 12mm;
+    max-width: 40mm;
+    object-fit: contain;
+}
+.resume-a4[data-template="template-7"] .t7-sig-name {
+    font-size: 7.5pt;
+    color: #111827;
+    border-top: 1px solid #111827;
+    padding-top: 0.5mm;
+    min-width: 35mm;
+}
+
+/* ===================================================================
+   TEMPLATE 8 (Turquoise Sidebar + White Body with Swirl Motifs)
+   =================================================================== */
+.resume-a4[data-template="template-8"] {
+    padding: 0;
+    overflow: hidden;
+    position: relative;
+    background: #ffffff;
+    display: flex;
+    align-items: stretch;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+.resume-a4[data-template="template-8"] .t8-sidebar {
+    flex: 0 0 34%;
+    width: 34%;
+    background-color: #51c9d9;
+    padding: 8mm 6mm 10mm 7mm;
+    color: #111827;
+    display: flex;
+    flex-direction: column;
+}
+.resume-a4[data-template="template-8"] .t8-photo-wrap {
+    width: 28mm;
+    height: 28mm;
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.9);
+    margin: 0 auto 5mm auto;
+    overflow: hidden;
+    background: rgba(255,255,255,0.25);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.12);
+    flex-shrink: 0;
+}
+.resume-a4[data-template="template-8"] .t8-photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.resume-a4[data-template="template-8"] .t8-photo-empty {
+    width: 100%;
+    height: 100%;
+    background: rgba(255,255,255,0.3);
+}
+.resume-a4[data-template="template-8"] .t8-side-sec {
+    margin-bottom: 4.5mm;
+}
+.resume-a4[data-template="template-8"] .t8-side-title {
+    font-size: 10pt;
+    font-weight: 800;
+    color: #111827;
+    margin-bottom: 1.5mm;
+}
+.resume-a4[data-template="template-8"] .t8-contact-item {
+    font-size: 8pt;
+    color: #1f2937;
+    margin-bottom: 1.5mm;
+    line-height: 1.3;
+    word-break: break-word;
+}
+.resume-a4[data-template="template-8"] .t8-contact-item a {
+    color: #0369a1;
+    text-decoration: none;
+}
+.resume-a4[data-template="template-8"] .t8-side-text {
+    font-size: 8pt;
+    color: #1f2937;
+    line-height: 1.38;
+    white-space: pre-wrap;
+}
+.resume-a4[data-template="template-8"] .t8-list {
+    margin: 0;
+    padding-left: 4mm;
+    list-style-type: disc;
+}
+.resume-a4[data-template="template-8"] .t8-list li {
+    font-size: 8pt;
+    color: #1f2937;
+    margin-bottom: 0.8mm;
+}
+.resume-a4[data-template="template-8"] .t8-main {
+    flex: 1 1 66%;
+    min-width: 0;
+    background: #ffffff;
+    padding: 8mm 9mm 8mm 9mm;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+.resume-a4[data-template="template-8"] .t8-swirl-top {
+    position: absolute;
+    top: 4mm;
+    right: 6mm;
+    width: 25mm;
+    height: 18mm;
+    pointer-events: none;
+    opacity: 0.7;
+}
+.resume-a4[data-template="template-8"] .t8-swirl-bottom {
+    position: absolute;
+    bottom: 15mm;
+    right: 4mm;
+    width: 28mm;
+    height: 22mm;
+    pointer-events: none;
+    opacity: 0.6;
+}
+.resume-a4[data-template="template-8"] .t8-header {
+    margin-bottom: 4mm;
+    position: relative;
+    z-index: 1;
+}
+.resume-a4[data-template="template-8"] .t8-name {
+    font-size: 21pt;
+    font-weight: 800;
+    color: #111827;
+    line-height: 1.1;
+    margin: 0;
+}
+.resume-a4[data-template="template-8"] .t8-headline {
+    font-size: 10pt;
+    color: #4b5563;
+    margin-top: 1mm;
+}
+.resume-a4[data-template="template-8"] .t8-sec {
+    margin-bottom: 4.5mm;
+    position: relative;
+    z-index: 1;
+    break-inside: avoid;
+}
+.resume-a4[data-template="template-8"] .t8-sec-title {
+    font-size: 10.5pt;
+    font-weight: 800;
+    color: #111827;
+    margin-bottom: 2mm;
+}
+.resume-a4[data-template="template-8"] .t8-item {
+    margin-bottom: 3.5mm;
+    break-inside: avoid;
+}
+.resume-a4[data-template="template-8"] .t8-item-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 2mm;
+}
+.resume-a4[data-template="template-8"] .t8-item-title {
+    font-size: 9.5pt;
+    font-weight: 700;
+    color: #111827;
+}
+.resume-a4[data-template="template-8"] .t8-item-meta {
+    font-size: 8pt;
+    color: #6b7280;
+    white-space: nowrap;
+}
+.resume-a4[data-template="template-8"] .t8-item-sub {
+    font-size: 8.5pt;
+    color: #374151;
+    margin-top: 0.3mm;
+}
+.resume-a4[data-template="template-8"] .t8-item-body {
+    font-size: 8pt;
+    color: #4b5563;
+    line-height: 1.35;
+    margin-top: 0.8mm;
+    white-space: pre-wrap;
+}
+.resume-a4[data-template="template-8"] .t8-link {
+    font-size: 8pt;
+    margin-top: 0.4mm;
+    word-break: break-all;
+}
+.resume-a4[data-template="template-8"] .t8-link a {
+    color: #0284c7;
+    text-decoration: none;
+}
+.resume-a4[data-template="template-8"] .t8-sig {
+    margin-top: 4mm;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    position: relative;
+    z-index: 1;
+    break-inside: avoid;
+}
+.resume-a4[data-template="template-8"] .t8-sig img {
+    max-height: 14mm;
+    max-width: 48mm;
+    object-fit: contain;
+}
+.resume-a4[data-template="template-8"] .t8-sig-line {
+    font-size: 7.5pt;
+    color: #0369a1;
+    border-top: 1px solid #51c9d9;
+    margin-top: 1mm;
+    padding-top: 0.5mm;
+    width: 45mm;
+    text-align: center;
+}
+
 /* Print Handling */
 @media print {
     body * { visibility: hidden !important; }
@@ -823,4 +1848,846 @@
         size: A4;
         margin: 0;
     }
+}
+
+
+/* =====================================================================
+   TEMPLATE 9 — Minimalist Full-Width Crimson Row Grid
+   Reference: Red circular badges, clean row dividers, chips for skills/languages
+   ===================================================================== */
+.resume-a4[data-template="template-9"] {
+    background: #ffffff;
+    color: #2d3748;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 8pt;
+    line-height: 1.45;
+    padding: 10mm 12mm 12mm 12mm;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+.resume-a4[data-template="template-9"] .t9-header {
+    margin-bottom: 4mm;
+    padding-bottom: 3.5mm;
+    border-bottom: 1.5px solid #eaeaea;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 4mm;
+}
+.resume-a4[data-template="template-9"] .t9-header-text {
+    flex: 1;
+}
+.resume-a4[data-template="template-9"] .t9-name {
+    font-size: 19pt;
+    font-weight: 800;
+    color: #111827;
+    line-height: 1.1;
+    margin: 0 0 1mm 0;
+    letter-spacing: -0.5px;
+}
+.resume-a4[data-template="template-9"] .t9-headline {
+    font-size: 9pt;
+    font-weight: 600;
+    color: #4b5563;
+    margin-bottom: 2mm;
+}
+.resume-a4[data-template="template-9"] .t9-contact-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2.5mm 4mm;
+    font-size: 7.2pt;
+    color: #4b5563;
+}
+.resume-a4[data-template="template-9"] .t9-contact-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 1.2mm;
+}
+.resume-a4[data-template="template-9"] .t9-contact-icon {
+    color: #c93b3b;
+    font-size: 7.5pt;
+}
+.resume-a4[data-template="template-9"] .t9-table {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+.resume-a4[data-template="template-9"] .t9-row {
+    display: grid;
+    grid-template-columns: 32mm 1fr;
+    gap: 4mm;
+    padding: 2.2mm 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+.resume-a4[data-template="template-9"] .t9-row:last-child {
+    border-bottom: none;
+}
+.resume-a4[data-template="template-9"] .t9-sec-title {
+    display: flex;
+    align-items: center;
+    gap: 1.8mm;
+    font-size: 8pt;
+    font-weight: 700;
+    color: #c93b3b;
+}
+.resume-a4[data-template="template-9"] .t9-badge-icon {
+    width: 4.8mm;
+    height: 4.8mm;
+    border-radius: 50%;
+    background: #c93b3b;
+    color: #ffffff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 6pt;
+    flex-shrink: 0;
+}
+.resume-a4[data-template="template-9"] .t9-content {
+    font-size: 7.8pt;
+    color: #374151;
+}
+.resume-a4[data-template="template-9"] .t9-entry {
+    margin-bottom: 2mm;
+}
+.resume-a4[data-template="template-9"] .t9-entry:last-child {
+    margin-bottom: 0;
+}
+.resume-a4[data-template="template-9"] .t9-entry-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 2mm;
+}
+.resume-a4[data-template="template-9"] .t9-entry-title {
+    font-weight: 700;
+    color: #111827;
+}
+.resume-a4[data-template="template-9"] .t9-entry-sub {
+    font-weight: 600;
+    color: #4b5563;
+    font-size: 7.4pt;
+}
+.resume-a4[data-template="template-9"] .t9-entry-dates {
+    font-size: 7pt;
+    color: #6b7280;
+    white-space: nowrap;
+}
+.resume-a4[data-template="template-9"] .t9-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.2mm;
+}
+.resume-a4[data-template="template-9"] .t9-chip {
+    padding: 0.8mm 2.2mm;
+    border: 1px solid #c93b3b;
+    color: #c93b3b;
+    border-radius: 1mm;
+    font-size: 7.2pt;
+    font-weight: 500;
+}
+.resume-a4[data-template="template-9"] .t9-sig-wrap {
+    margin-top: auto;
+    padding-top: 3mm;
+    display: flex;
+    justify-content: flex-end;
+}
+.resume-a4[data-template="template-9"] .t9-sig-box {
+    text-align: right;
+    display: flex;
+    align-items: flex-end;
+    gap: 3mm;
+}
+.resume-a4[data-template="template-9"] .t9-sig-label {
+    font-size: 7.5pt;
+    font-weight: 700;
+    color: #111827;
+}
+.resume-a4[data-template="template-9"] .t9-sig-img {
+    max-height: 11mm;
+    max-width: 34mm;
+    object-fit: contain;
+}
+.resume-a4[data-template="template-9"] .t9-sig-name {
+    font-size: 7.2pt;
+    color: #374151;
+    font-weight: 600;
+    border-top: 1px solid #374151;
+    padding-top: 0.8mm;
+    margin-top: 0.8mm;
+    text-align: center;
+}
+
+/* =====================================================================
+   TEMPLATE 10 — Framed Charcoal Header & Solid Pill Banners
+   Reference: Double horizontal border frame, dark charcoal (#515151) pill banners
+   ===================================================================== */
+.resume-a4[data-template="template-10"] {
+    background: #ffffff;
+    color: #2b2b2b;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 8pt;
+    line-height: 1.4;
+    padding: 8mm 11mm 11mm 11mm;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+.resume-a4[data-template="template-10"] .t10-header-wrap {
+    border-top: 3px double #333333;
+    border-bottom: 2px solid #515151;
+    padding: 3.5mm 0;
+    margin-bottom: 4mm;
+    display: flex;
+    gap: 4.5mm;
+    align-items: center;
+}
+.resume-a4[data-template="template-10"] .t10-photo-wrap {
+    width: 26mm;
+    height: 26mm;
+    flex-shrink: 0;
+    border: 1px solid #cccccc;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+.resume-a4[data-template="template-10"] .t10-photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.resume-a4[data-template="template-10"] .t10-photo-empty {
+    width: 100%;
+    height: 100%;
+    background: #f1f5f9;
+}
+.resume-a4[data-template="template-10"] .t10-header-info {
+    flex: 1;
+}
+.resume-a4[data-template="template-10"] .t10-name {
+    font-size: 18pt;
+    font-weight: 800;
+    color: #1a1a1a;
+    line-height: 1.1;
+    margin: 0 0 1mm 0;
+}
+.resume-a4[data-template="template-10"] .t10-headline {
+    font-size: 9pt;
+    font-weight: 600;
+    color: #555555;
+    margin-bottom: 1.5mm;
+}
+.resume-a4[data-template="template-10"] .t10-contact-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.8mm 3mm;
+    font-size: 6.8pt;
+    color: #444444;
+}
+.resume-a4[data-template="template-10"] .t10-contact-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 1.2mm;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.resume-a4[data-template="template-10"] .t10-columns {
+    display: grid;
+    grid-template-columns: 60mm 1fr;
+    gap: 5.5mm;
+    flex: 1;
+}
+.resume-a4[data-template="template-10"] .t10-banner {
+    background: #515151;
+    color: #ffffff;
+    padding: 1mm 2.2mm;
+    border-radius: 1mm;
+    font-size: 7.8pt;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 1.5mm;
+    margin-bottom: 2mm;
+}
+.resume-a4[data-template="template-10"] .t10-banner-icon {
+    font-size: 7pt;
+}
+.resume-a4[data-template="template-10"] .t10-sec {
+    margin-bottom: 3mm;
+}
+.resume-a4[data-template="template-10"] .t10-entry {
+    margin-bottom: 2.2mm;
+}
+.resume-a4[data-template="template-10"] .t10-entry:last-child {
+    margin-bottom: 0;
+}
+.resume-a4[data-template="template-10"] .t10-entry-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 2mm;
+}
+.resume-a4[data-template="template-10"] .t10-entry-title {
+    font-weight: 700;
+    color: #111111;
+}
+.resume-a4[data-template="template-10"] .t10-entry-sub {
+    font-weight: 600;
+    color: #444444;
+    font-size: 7.4pt;
+}
+.resume-a4[data-template="template-10"] .t10-entry-dates {
+    font-size: 6.8pt;
+    color: #666666;
+    white-space: nowrap;
+}
+.resume-a4[data-template="template-10"] .t10-bullets {
+    margin: 0;
+    padding-left: 3.5mm;
+    font-size: 7.3pt;
+    color: #333333;
+}
+.resume-a4[data-template="template-10"] .t10-sig-wrap {
+    margin-top: auto;
+    padding-top: 3mm;
+    display: flex;
+    justify-content: flex-end;
+}
+.resume-a4[data-template="template-10"] .t10-sig-box {
+    text-align: right;
+    display: flex;
+    align-items: flex-end;
+    gap: 3mm;
+}
+.resume-a4[data-template="template-10"] .t10-sig-label {
+    font-size: 7.5pt;
+    font-weight: 700;
+    color: #111111;
+}
+.resume-a4[data-template="template-10"] .t10-sig-img {
+    max-height: 11mm;
+    max-width: 34mm;
+    object-fit: contain;
+}
+.resume-a4[data-template="template-10"] .t10-sig-name {
+    font-size: 7.2pt;
+    color: #333333;
+    font-weight: 600;
+    border-top: 1px solid #333333;
+    padding-top: 0.8mm;
+    margin-top: 0.8mm;
+    text-align: center;
+}
+
+/* =====================================================================
+   TEMPLATE 11 — Sky Blue Pastel Two-Column Layout with Rail Timeline
+   Reference: Top blue accent line, centered circular photo, sky blue (#75a7f8) banners
+   ===================================================================== */
+.resume-a4[data-template="template-11"] {
+    background: #ffffff;
+    color: #2c3e50;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 8pt;
+    line-height: 1.4;
+    padding: 0 11mm 11mm 11mm;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+.resume-a4[data-template="template-11"] .t11-top-line {
+    height: 3px;
+    background: #75a7f8;
+    margin: 0 -11mm 4.5mm -11mm;
+}
+.resume-a4[data-template="template-11"] .t11-header-center {
+    text-align: center;
+    margin-bottom: 4mm;
+}
+.resume-a4[data-template="template-11"] .t11-photo-wrap {
+    width: 25mm;
+    height: 25mm;
+    border-radius: 50%;
+    border: 3px solid #d8e6fc;
+    margin: 0 auto 2mm auto;
+    overflow: hidden;
+}
+.resume-a4[data-template="template-11"] .t11-photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.resume-a4[data-template="template-11"] .t11-photo-empty {
+    width: 100%;
+    height: 100%;
+    background: #f1f5f9;
+}
+.resume-a4[data-template="template-11"] .t11-name {
+    font-size: 18pt;
+    font-weight: 800;
+    color: #3b74ca;
+    line-height: 1.1;
+    margin: 0 0 1mm 0;
+}
+.resume-a4[data-template="template-11"] .t11-headline {
+    font-size: 9pt;
+    font-weight: 600;
+    color: #5a6b82;
+}
+.resume-a4[data-template="template-11"] .t11-columns {
+    display: grid;
+    grid-template-columns: 58mm 1fr;
+    gap: 5.5mm;
+    flex: 1;
+}
+.resume-a4[data-template="template-11"] .t11-banner {
+    background: #75a7f8;
+    color: #ffffff;
+    padding: 1mm 2.2mm;
+    border-radius: 1mm;
+    font-size: 7.8pt;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 1.5mm;
+    margin-bottom: 2mm;
+}
+.resume-a4[data-template="template-11"] .t11-sec {
+    margin-bottom: 3mm;
+}
+.resume-a4[data-template="template-11"] .t11-contact-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1mm;
+    font-size: 7pt;
+    color: #4a5568;
+}
+.resume-a4[data-template="template-11"] .t11-contact-item {
+    display: flex;
+    align-items: center;
+    gap: 1.2mm;
+}
+.resume-a4[data-template="template-11"] .t11-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.2mm;
+}
+.resume-a4[data-template="template-11"] .t11-chip {
+    background: #eef5fe;
+    border: 1px solid #b3d1fc;
+    color: #2b6cb0;
+    padding: 0.8mm 2mm;
+    border-radius: 1mm;
+    font-size: 7pt;
+    font-weight: 500;
+}
+.resume-a4[data-template="template-11"] .t11-timeline {
+    position: relative;
+    padding-left: 3.5mm;
+    border-left: 1.5px solid #d0e2fc;
+    margin-left: 1.5mm;
+}
+.resume-a4[data-template="template-11"] .t11-timeline-entry {
+    position: relative;
+    margin-bottom: 2.5mm;
+}
+.resume-a4[data-template="template-11"] .t11-timeline-entry:last-child {
+    margin-bottom: 0;
+}
+.resume-a4[data-template="template-11"] .t11-node {
+    position: absolute;
+    left: -4.3mm;
+    top: 1mm;
+    width: 2mm;
+    height: 2mm;
+    border-radius: 50%;
+    background: #75a7f8;
+    border: 1px solid #ffffff;
+}
+.resume-a4[data-template="template-11"] .t11-entry-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 2mm;
+}
+.resume-a4[data-template="template-11"] .t11-entry-title {
+    font-weight: 700;
+    color: #111827;
+}
+.resume-a4[data-template="template-11"] .t11-entry-sub {
+    font-weight: 600;
+    color: #4b5563;
+    font-size: 7.3pt;
+}
+.resume-a4[data-template="template-11"] .t11-entry-dates {
+    font-size: 6.8pt;
+    color: #6b7280;
+    white-space: nowrap;
+}
+.resume-a4[data-template="template-11"] .t11-bullets {
+    margin: 0;
+    padding-left: 3.5mm;
+    font-size: 7.2pt;
+    color: #374151;
+}
+.resume-a4[data-template="template-11"] .t11-sig-wrap {
+    margin-top: auto;
+    padding-top: 3mm;
+    display: flex;
+    justify-content: flex-end;
+}
+.resume-a4[data-template="template-11"] .t11-sig-box {
+    text-align: right;
+    display: flex;
+    align-items: flex-end;
+    gap: 3mm;
+}
+.resume-a4[data-template="template-11"] .t11-sig-label {
+    font-size: 7.5pt;
+    font-weight: 700;
+    color: #111827;
+}
+.resume-a4[data-template="template-11"] .t11-sig-img {
+    max-height: 11mm;
+    max-width: 34mm;
+    object-fit: contain;
+}
+.resume-a4[data-template="template-11"] .t11-sig-name {
+    font-size: 7.2pt;
+    color: #374151;
+    font-weight: 600;
+    border-top: 1px solid #374151;
+    padding-top: 0.8mm;
+    margin-top: 0.8mm;
+    text-align: center;
+}
+
+/* =====================================================================
+   TEMPLATE 12 — Dark Slate Banner & Minimalist Icon Rows
+   Reference: Dark slate (#4b4f5a) top block, square photo, outline icon badges
+   ===================================================================== */
+.resume-a4[data-template="template-12"] {
+    background: #ffffff;
+    color: #2d3748;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 8pt;
+    line-height: 1.45;
+    padding: 0;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+.resume-a4[data-template="template-12"] .t12-banner {
+    background: #4b4f5a;
+    color: #ffffff;
+    padding: 6mm 11mm;
+    display: flex;
+    gap: 4.5mm;
+    align-items: center;
+}
+.resume-a4[data-template="template-12"] .t12-photo-wrap {
+    width: 26mm;
+    height: 26mm;
+    border: 2px solid rgba(255,255,255,0.9);
+    flex-shrink: 0;
+    overflow: hidden;
+}
+.resume-a4[data-template="template-12"] .t12-photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.resume-a4[data-template="template-12"] .t12-photo-empty {
+    width: 100%;
+    height: 100%;
+    background: #64748b;
+}
+.resume-a4[data-template="template-12"] .t12-banner-info {
+    flex: 1;
+}
+.resume-a4[data-template="template-12"] .t12-name {
+    font-size: 19pt;
+    font-weight: 800;
+    color: #ffffff;
+    line-height: 1.1;
+    margin: 0 0 1mm 0;
+}
+.resume-a4[data-template="template-12"] .t12-headline {
+    font-size: 9pt;
+    font-weight: 600;
+    color: #cbd5e1;
+    margin-bottom: 1.5mm;
+}
+.resume-a4[data-template="template-12"] .t12-contact-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.8mm 3mm;
+    font-size: 6.8pt;
+    color: #e2e8f0;
+}
+.resume-a4[data-template="template-12"] .t12-contact-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 1.2mm;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.resume-a4[data-template="template-12"] .t12-body {
+    padding: 5mm 11mm 11mm 11mm;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+.resume-a4[data-template="template-12"] .t12-row {
+    display: grid;
+    grid-template-columns: 32mm 1fr;
+    gap: 4mm;
+    padding: 2.2mm 0;
+    border-bottom: 1px solid #f1f5f9;
+}
+.resume-a4[data-template="template-12"] .t12-row:last-child {
+    border-bottom: none;
+}
+.resume-a4[data-template="template-12"] .t12-sec-head {
+    display: flex;
+    align-items: center;
+    gap: 1.8mm;
+    font-size: 8pt;
+    font-weight: 700;
+    color: #334155;
+}
+.resume-a4[data-template="template-12"] .t12-icon-circle {
+    width: 4.8mm;
+    height: 4.8mm;
+    border-radius: 50%;
+    border: 1.2px solid #64748b;
+    color: #475569;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 6.2pt;
+    flex-shrink: 0;
+}
+.resume-a4[data-template="template-12"] .t12-content {
+    font-size: 7.8pt;
+    color: #334155;
+}
+.resume-a4[data-template="template-12"] .t12-entry {
+    margin-bottom: 2mm;
+}
+.resume-a4[data-template="template-12"] .t12-entry:last-child {
+    margin-bottom: 0;
+}
+.resume-a4[data-template="template-12"] .t12-entry-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 2mm;
+}
+.resume-a4[data-template="template-12"] .t12-entry-title {
+    font-weight: 700;
+    color: #0f172a;
+}
+.resume-a4[data-template="template-12"] .t12-entry-sub {
+    font-weight: 600;
+    color: #475569;
+    font-size: 7.4pt;
+}
+.resume-a4[data-template="template-12"] .t12-entry-dates {
+    font-size: 6.8pt;
+    color: #64748b;
+    white-space: nowrap;
+}
+.resume-a4[data-template="template-12"] .t12-sig-wrap {
+    margin-top: auto;
+    padding-top: 3mm;
+    display: flex;
+    justify-content: flex-end;
+}
+.resume-a4[data-template="template-12"] .t12-sig-box {
+    text-align: right;
+    display: flex;
+    align-items: flex-end;
+    gap: 3mm;
+}
+.resume-a4[data-template="template-12"] .t12-sig-label {
+    font-size: 7.5pt;
+    font-weight: 700;
+    color: #0f172a;
+}
+.resume-a4[data-template="template-12"] .t12-sig-img {
+    max-height: 11mm;
+    max-width: 34mm;
+    object-fit: contain;
+}
+.resume-a4[data-template="template-12"] .t12-sig-name {
+    font-size: 7.2pt;
+    color: #334155;
+    font-weight: 600;
+    border-top: 1px solid #334155;
+    padding-top: 0.8mm;
+    margin-top: 0.8mm;
+    text-align: center;
+}
+
+/* =====================================================================
+   TEMPLATE 13 — Cobalt Blue Inverted Right Sidebar
+   Reference: Left main column, Right solid Cobalt Blue (#3572cd) top card & banners
+   ===================================================================== */
+.resume-a4[data-template="template-13"] {
+    background: #ffffff;
+    color: #2d3748;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 8pt;
+    line-height: 1.4;
+    padding: 8mm 11mm 11mm 11mm;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+.resume-a4[data-template="template-13"] .t13-layout {
+    display: grid;
+    grid-template-columns: 1fr 60mm;
+    gap: 5.5mm;
+    flex: 1;
+}
+.resume-a4[data-template="template-13"] .t13-card {
+    background: #3572cd;
+    color: #ffffff;
+    border-radius: 2mm;
+    padding: 3.5mm 3mm;
+    text-align: center;
+    margin-bottom: 3.5mm;
+}
+.resume-a4[data-template="template-13"] .t13-photo-wrap {
+    width: 24mm;
+    height: 24mm;
+    border-radius: 50%;
+    border: 2px solid #ffffff;
+    margin: 0 auto 2mm auto;
+    overflow: hidden;
+}
+.resume-a4[data-template="template-13"] .t13-photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.resume-a4[data-template="template-13"] .t13-photo-empty {
+    width: 100%;
+    height: 100%;
+    background: rgba(255,255,255,0.2);
+}
+.resume-a4[data-template="template-13"] .t13-name {
+    font-size: 15pt;
+    font-weight: 800;
+    color: #ffffff;
+    line-height: 1.1;
+    margin: 0 0 1mm 0;
+}
+.resume-a4[data-template="template-13"] .t13-headline {
+    font-size: 8.5pt;
+    font-weight: 600;
+    color: #dbeafe;
+    margin-bottom: 2mm;
+}
+.resume-a4[data-template="template-13"] .t13-contact-list {
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: 1mm;
+    font-size: 6.8pt;
+    color: #eff6ff;
+    padding-top: 2mm;
+    border-top: 1px solid rgba(255,255,255,0.25);
+}
+.resume-a4[data-template="template-13"] .t13-contact-item {
+    display: flex;
+    align-items: center;
+    gap: 1.2mm;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.resume-a4[data-template="template-13"] .t13-banner {
+    background: #3572cd;
+    color: #ffffff;
+    padding: 1mm 2.2mm;
+    border-radius: 1mm;
+    font-size: 7.8pt;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 1.5mm;
+    margin-bottom: 2mm;
+}
+.resume-a4[data-template="template-13"] .t13-sec {
+    margin-bottom: 3mm;
+}
+.resume-a4[data-template="template-13"] .t13-entry {
+    margin-bottom: 2.2mm;
+}
+.resume-a4[data-template="template-13"] .t13-entry:last-child {
+    margin-bottom: 0;
+}
+.resume-a4[data-template="template-13"] .t13-entry-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 2mm;
+}
+.resume-a4[data-template="template-13"] .t13-entry-title {
+    font-weight: 700;
+    color: #111827;
+}
+.resume-a4[data-template="template-13"] .t13-entry-sub {
+    font-weight: 600;
+    color: #4b5563;
+    font-size: 7.4pt;
+}
+.resume-a4[data-template="template-13"] .t13-entry-dates {
+    font-size: 6.8pt;
+    color: #6b7280;
+    white-space: nowrap;
+}
+.resume-a4[data-template="template-13"] .t13-bullets {
+    margin: 0;
+    padding-left: 3.5mm;
+    font-size: 7.3pt;
+    color: #374151;
+}
+.resume-a4[data-template="template-13"] .t13-sig-wrap {
+    margin-top: auto;
+    padding-top: 3mm;
+    display: flex;
+    justify-content: flex-end;
+}
+.resume-a4[data-template="template-13"] .t13-sig-box {
+    text-align: right;
+    display: flex;
+    align-items: flex-end;
+    gap: 3mm;
+}
+.resume-a4[data-template="template-13"] .t13-sig-label {
+    font-size: 7.5pt;
+    font-weight: 700;
+    color: #111827;
+}
+.resume-a4[data-template="template-13"] .t13-sig-img {
+    max-height: 11mm;
+    max-width: 34mm;
+    object-fit: contain;
+}
+.resume-a4[data-template="template-13"] .t13-sig-name {
+    font-size: 7.2pt;
+    color: #374151;
+    font-weight: 600;
+    border-top: 1px solid #374151;
+    padding-top: 0.8mm;
+    margin-top: 0.8mm;
+    text-align: center;
 }

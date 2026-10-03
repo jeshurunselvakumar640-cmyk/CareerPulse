@@ -21,7 +21,7 @@
  *      same-origin response for a known-static file type.
  */
 
-const CACHE_VERSION = "v4";
+const CACHE_VERSION = "v13";
 const CACHE_NAME = `careerpulse-static-${CACHE_VERSION}`;
 const CACHE_PREFIX = "careerpulse-static-";
 
@@ -42,7 +42,20 @@ const PRECACHE_URLS = [
     "/static/assets/logo.png",
     "/static/assets/icon-192.png",
     "/static/assets/icon-512.png",
-    "/static/assets/apple-touch-icon.png"
+    "/static/assets/apple-touch-icon.png",
+    "/static/assets/templates/template-1.png",
+    "/static/assets/templates/template-2.png",
+    "/static/assets/templates/template-3.png",
+    "/static/assets/templates/template-4.png",
+    "/static/assets/templates/template-5.png",
+    "/static/assets/templates/template-6.png",
+    "/static/assets/templates/template-7.png",
+    "/static/assets/templates/template-8.png",
+    "/static/assets/templates/template-9.png",
+    "/static/assets/templates/template-10.png",
+    "/static/assets/templates/template-11.png",
+    "/static/assets/templates/template-12.png",
+    "/static/assets/templates/template-13.png"
 ];
 
 /*
@@ -138,6 +151,12 @@ self.addEventListener("fetch", (event) => {
     // falling back to the cached shell when offline.
     if (request.mode === "navigate") {
         event.respondWith(networkFirstDocument(request, url));
+        return;
+    }
+
+    // Application shell JS and CSS: network-first so updates take effect immediately
+    if (url.pathname === "/static/app.js" || url.pathname === "/static/styles/dashboard.css") {
+        event.respondWith(networkFirstStatic(request));
         return;
     }
 
@@ -237,4 +256,23 @@ function offlineResponse() {
             headers: { "Content-Type": "text/html; charset=utf-8" }
         }
     );
+}
+
+/**
+ * Network-first for critical application code (app.js, dashboard.css)
+ * with the cached asset as fallback when offline.
+ */
+async function networkFirstStatic(request) {
+    const cache = await caches.open(CACHE_NAME);
+    try {
+        const response = await fetch(request);
+        if (isCacheable(response)) {
+            cache.put(request, response.clone()).catch(() => {});
+        }
+        return response;
+    } catch (error) {
+        const cached = await cache.match(request);
+        if (cached) return cached;
+        throw error;
+    }
 }

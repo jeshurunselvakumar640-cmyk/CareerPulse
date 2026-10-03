@@ -2691,3 +2691,86 @@
     margin-top: 0.8mm;
     text-align: center;
 }
+
+
+/* ===================================================================
+   SWIPE CARD STACK & GESTURE BADGES
+   =================================================================== */
+.swipe-card-stack {
+    position: relative;
+    width: 100%;
+    min-height: 380px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+}
+
+.swipe-card {
+    position: relative;
+    z-index: 10;
+    width: 100%;
+    touch-action: none;
+    user-select: none;
+    will-change: transform, opacity;
+    cursor: grab;
+}
+
+.swipe-card:active {
+    cursor: grabbing;
+}
+
+.swipe-card-under {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    pointer-events: none;
+    user-select: none;
+    will-change: transform, opacity;
+    transform: scale(0.95) translateY(12px);
+    opacity: 0.6;
+    transition: transform 0.25s ease, opacity 0.25s ease;
+}
+
+.swipe-badge {
+    position: absolute;
+    z-index: 30;
+    pointer-events: none;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    border-radius: 12px;
+    backdrop-filter: blur(8px);
+    opacity: 0;
+    transition: opacity 0.1s ease;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.swipe-badge-interested {
+    top: 20px;
+    left: 20px;
+    border: 3px solid #10b981;
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.2);
+    transform: rotate(-12deg);
+}
+
+.swipe-badge-skip {
+    top: 20px;
+    right: 20px;
+    border: 3px solid #f43f5e;
+    color: #f43f5e;
+    background: rgba(244, 63, 94, 0.2);
+    transform: rotate(12deg);
+}
+
+.swipe-badge-waitlist {
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 3px solid #f59e0b;
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.2);
+}

@@ -144,14 +144,24 @@ class ProfileUpdateRequest(BaseModel):
 class OpportunityAction(BaseModel):
     title: str
     company: str
-    location: str
-    matchPercentage: int
-    tier: str
-    skills: list = []
-    lackingSkills: list = []
-    summary: str
-    url: str
+    location: Optional[str] = "Remote"
+    matchPercentage: Optional[int] = 60
+    tier: Optional[str] = "Gold"
+    skills: Optional[list] = []
+    lackingSkills: Optional[list] = []
+    summary: Optional[str] = ""
+    url: Optional[str] = ""
     status: str
+
+    class Config:
+        extra = "allow"
+
+class OpportunityRemoveRequest(BaseModel):
+    company: str
+    title: str
+
+    class Config:
+        extra = "allow"
 
 class ContactLookupRequest(BaseModel):
     company: str
@@ -513,11 +523,12 @@ async def get_saved_opportunities(request: Request, authorization: Optional[str]
 async def save_opportunity(action: OpportunityAction, auth_tuple=Depends(require_auth_token_and_user)):
     _, user = auth_tuple
     try:
+        opp_data = action.model_dump() if hasattr(action, "model_dump") else action.dict()
         payload = {
             "user_id": user.id,
             "opportunity_key": f"{action.company}_{action.title}".lower().replace(" ", "_"),
             "status": action.status,
-            "opportunity_data": action.dict()
+            "opportunity_data": opp_data
         }
         supabase.table("user_saved_opportunities").upsert(payload, on_conflict="user_id,opportunity_key").execute()
         return {"status": "success"}
@@ -527,6 +538,17 @@ async def save_opportunity(action: OpportunityAction, auth_tuple=Depends(require
         # exception is logged rather than returned.
         logger.error("Save opportunity error: %s", e)
         raise HTTPException(status_code=500, detail="Could not save this opportunity.")
+
+@app.post("/api/user/opportunities/remove")
+async def remove_saved_opportunity(action: OpportunityRemoveRequest, auth_tuple=Depends(require_auth_token_and_user)):
+    _, user = auth_tuple
+    try:
+        opp_key = f"{action.company}_{action.title}".lower().replace(" ", "_")
+        supabase.table("user_saved_opportunities").delete().eq("user_id", user.id).eq("opportunity_key", opp_key).execute()
+        return {"status": "success"}
+    except Exception as e:
+        logger.error("Remove opportunity error: %s", e)
+        raise HTTPException(status_code=500, detail="Could not remove saved opportunity.")
 
 @app.get("/api/user/profile/insights")
 async def get_opportunity_insights(count: int = 50, request: Request = None, authorization: Optional[str] = Header(None)):
@@ -1735,3 +1757,17 @@ async def serve_pwa_service_worker():
         response.headers["Service-Worker-Allowed"] = "/"
         return response
     return JSONResponse(content={"status": "Service worker not available"}, status_code=404)
+
+@app.get("/favicon.ico", include_in_schema=False)
+@app.get("/favicon.png", include_in_schema=False)
+async def serve_favicon():
+    """Serve the CareerPulse tab icon/favicon."""
+    response = _serve_frontend_file("favicon.png")
+    if response is not None:
+        response.headers["Content-Type"] = "image/png"
+        response.headers["Cache-Control"] = "public, max-age=86400"
+        return response
+    target = os.path.join(frontend_path, "assets", "logo.png")
+    if os.path.exists(target):
+        return FileResponse(target, media_type="image/png")
+    return JSONResponse(content={"status": "Favicon not available"}, status_code=404)

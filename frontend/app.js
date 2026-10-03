@@ -3450,10 +3450,12 @@ function navigateTo(view) {
     const navBtn = document.getElementById(`nav-${view}`);
     if (navBtn) navBtn.classList.add("bg-indigo-600", "text-white");
 
-    // Load personalized news the first time the tab is opened only.
+    // Load tab contents
     if (view === "news") loadPersonalizedNews();
     if (view === "applications") loadApplicationsView();
     if (view === "resume") loadResumeView();
+    if (view === "interested") renderInterestedList();
+    if (view === "waitlist") renderWaitlistedList();
 }
 
 /* ------------------------------------------------------------------
@@ -4410,42 +4412,16 @@ async function fetchLiveOpportunities(requestedCount = 50) {
     }
 }
 
-function renderTinderCard() {
-    const container = document.getElementById("tinderCardContainer");
-    const progressText = document.getElementById("swipeProgressText");
-    if (!container) return;
+/* ===================================================================
+ * OPPORTUNITY CARD SWIPE & INTERACTION SYSTEM
+ * =================================================================== */
 
-    if (mockOpportunities.length === 0) {
-        if (progressText) progressText.textContent = "0 Openings";
-        container.innerHTML = `
-            <div class="text-center p-8 bg-slate-900 border border-slate-800 rounded-2xl space-y-3 w-full">
-                <p class="text-base font-bold text-white">No verified opportunities found for this search.</p>
-                <p class="text-xs text-slate-400 leading-relaxed">CareerPulse strictly filters out listing pages, category indexes, aggregators, and unverified postings.</p>
-                <button onclick="closeTinderModal()" class="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white mt-2">Close Window</button>
-            </div>
-        `;
-        return;
-    }
+let isSwipeAnimating = false;
+const undoSwipeStack = [];
 
-    if (currentSwipeIndex >= mockOpportunities.length) {
-        if (progressText) progressText.textContent = "Completed";
-        container.innerHTML = `
-            <div class="text-center p-8 bg-slate-900 border border-slate-800 rounded-2xl space-y-3 w-full">
-                <p class="text-base font-bold text-white">All caught up! 🎉</p>
-                <p class="text-xs text-slate-400">You have swiped through all verified job opportunities.</p>
-                <button onclick="closeTinderModal()" class="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white mt-2">Close Window</button>
-            </div>
-        `;
-        return;
-    }
-
-    if (progressText) {
-        progressText.textContent = `Job ${currentSwipeIndex + 1} of ${mockOpportunities.length}`;
-    }
-
-    const job = mockOpportunities[currentSwipeIndex];
+function generateJobCardInnerHtml(job) {
+    if (!job) return { cardClass: "w-full p-6 rounded-2xl space-y-4 shadow-2xl bg-slate-900 border border-slate-800", html: "" };
     const scoreVal = typeof job.matchPercentage === 'number' ? job.matchPercentage : 60;
-
     let cardClass = "w-full p-6 rounded-2xl space-y-4 shadow-2xl bg-slate-900 border border-slate-800";
     let badgeMarkup = `<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">${scoreVal}% MATCH</span>`;
 
@@ -4466,74 +4442,420 @@ function renderTinderCard() {
 
     const companyInitial = escapeHtml((job.company || "E").charAt(0));
 
+    const html = `
+        <div class="flex justify-between items-start gap-3">
+            <div class="flex items-center gap-3 min-w-0">
+                <div class="w-10 h-10 rounded-xl bg-slate-950/80 p-2 border border-slate-800 shrink-0 flex items-center justify-center text-indigo-400 font-bold text-sm">
+                    ${companyInitial}
+                </div>
+                <div class="min-w-0">
+                    <h4 class="text-base font-bold text-white truncate">${escapeHtml(job.title)}</h4>
+                    <p class="text-xs font-semibold text-indigo-400 truncate">${escapeHtml(job.company)} • ${escapeHtml(job.location)}</p>
+                </div>
+            </div>
+            ${badgeMarkup}
+        </div>
+
+        <p class="text-xs text-slate-300 leading-relaxed">${escapeHtml(job.summary)}</p>
+
+        <div class="p-3 rounded-xl bg-slate-950/90 border border-slate-800 space-y-2">
+            <span class="text-[10px] font-bold text-rose-400 uppercase tracking-wider block">Missing Skills</span>
+            <div class="flex flex-wrap gap-1.5">
+                ${lackingBadges || '<span class="text-[10px] text-emerald-400 font-semibold">✓ All required skills matched!</span>'}
+            </div>
+        </div>
+
+        <div class="pt-2 border-t border-slate-800/80 flex justify-between items-center text-xs">
+            <span class="text-[10px] text-slate-400">✓ Verified Source</span>
+            <a href="${escapeHtml(job.url)}" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline font-bold text-xs flex items-center gap-1" onclick="event.stopPropagation()">
+                <span>Apply / View Post</span>
+                <span>↗</span>
+            </a>
+        </div>
+    `;
+
+    return { cardClass, html };
+}
+
+function renderTinderCard() {
+    const container = document.getElementById("tinderCardContainer");
+    const progressText = document.getElementById("swipeProgressText");
+    const undoBtn = document.getElementById("btnUndoSwipe");
+    if (!container) return;
+
+    if (undoBtn) {
+        if (undoSwipeStack.length > 0) undoBtn.classList.remove("hidden");
+        else undoBtn.classList.add("hidden");
+    }
+
+    if (mockOpportunities.length === 0) {
+        if (progressText) progressText.textContent = "0 Openings";
+        container.innerHTML = `
+            <div class="text-center p-8 bg-slate-900 border border-slate-800 rounded-2xl space-y-3 w-full">
+                <p class="text-base font-bold text-white">No verified opportunities found for this search.</p>
+                <p class="text-xs text-slate-400 leading-relaxed">CareerPulse strictly filters out listing pages, category indexes, aggregators, and unverified postings.</p>
+                <button onclick="closeTinderModal()" class="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white mt-2 transition hover:bg-indigo-500">Close Window</button>
+            </div>
+        `;
+        return;
+    }
+
+    if (currentSwipeIndex >= mockOpportunities.length) {
+        if (progressText) progressText.textContent = "Completed";
+        container.innerHTML = `
+            <div class="text-center p-8 bg-slate-900 border border-slate-800 rounded-2xl space-y-3 w-full">
+                <p class="text-base font-bold text-white">All caught up! 🎉</p>
+                <p class="text-xs text-slate-400">You have swiped through all verified job opportunities.</p>
+                <button onclick="closeTinderModal()" class="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white mt-2 transition hover:bg-indigo-500">Close Window</button>
+            </div>
+        `;
+        return;
+    }
+
+    if (progressText) {
+        progressText.textContent = `Job ${currentSwipeIndex + 1} of ${mockOpportunities.length}`;
+    }
+
+    const currentJob = mockOpportunities[currentSwipeIndex];
+    const nextJob = (currentSwipeIndex + 1 < mockOpportunities.length) ? mockOpportunities[currentSwipeIndex + 1] : null;
+
+    const currentRender = generateJobCardInnerHtml(currentJob);
+    const nextRender = nextJob ? generateJobCardInnerHtml(nextJob) : null;
+
+    let underCardHtml = "";
+    if (nextRender) {
+        underCardHtml = `
+            <div id="underSwipeCard" class="swipe-card-under ${nextRender.cardClass}">
+                ${nextRender.html}
+            </div>
+        `;
+    }
+
     container.innerHTML = `
-        <div id="popupSwipeCard" class="${cardClass}">
-            <div class="flex justify-between items-start gap-3">
-                <div class="flex items-center gap-3 min-w-0">
-                    <div class="w-10 h-10 rounded-xl bg-slate-950/80 p-2 border border-slate-800 shrink-0 flex items-center justify-center text-indigo-400 font-bold text-sm">
-                        ${companyInitial}
-                    </div>
-                    <div class="min-w-0">
-                        <h4 class="text-base font-bold text-white truncate">${escapeHtml(job.title)}</h4>
-                        <p class="text-xs font-semibold text-indigo-400 truncate">${escapeHtml(job.company)} • ${escapeHtml(job.location)}</p>
-                    </div>
+        <div class="swipe-card-stack">
+            ${underCardHtml}
+            <div id="popupSwipeCard" class="swipe-card ${currentRender.cardClass}">
+                <div id="badgeInterested" class="swipe-badge swipe-badge-interested">
+                    <span class="flex items-center gap-1.5">❤️ INTERESTED</span>
                 </div>
-                ${badgeMarkup}
-            </div>
-
-            <p class="text-xs text-slate-300 leading-relaxed">${escapeHtml(job.summary)}</p>
-
-            <div class="p-3 rounded-xl bg-slate-950/90 border border-slate-800 space-y-2">
-                <span class="text-[10px] font-bold text-rose-400 uppercase tracking-wider block">Missing Skills</span>
-                <div class="flex flex-wrap gap-1.5">
-                    ${lackingBadges || '<span class="text-[10px] text-emerald-400 font-semibold">✓ All required skills matched!</span>'}
+                <div id="badgeSkip" class="swipe-badge swipe-badge-skip">
+                    <span class="flex items-center gap-1.5">❌ SKIP</span>
                 </div>
-            </div>
-
-            <div class="pt-2 border-t border-slate-800/80 flex justify-between items-center text-xs">
-                <span class="text-[10px] text-slate-400">✓ Verified Source</span>
-                <a href="${escapeHtml(job.url)}" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:underline font-bold text-xs flex items-center gap-1">
-                    <span>Apply / View Post</span>
-                    <span>↗</span>
-                </a>
+                <div id="badgeWaitlist" class="swipe-badge swipe-badge-waitlist">
+                    <span class="flex items-center gap-1.5">⏳ WAITLIST</span>
+                </div>
+                ${currentRender.html}
             </div>
         </div>
     `;
+
+    attachSwipeGestureListeners();
 }
 
-function handlePopupSwipe(direction) {
+function attachSwipeGestureListeners() {
     const card = document.getElementById("popupSwipeCard");
-    if (!card || currentSwipeIndex >= mockOpportunities.length) return;
+    const underCard = document.getElementById("underSwipeCard");
+    const badgeInterested = document.getElementById("badgeInterested");
+    const badgeSkip = document.getElementById("badgeSkip");
+    const badgeWaitlist = document.getElementById("badgeWaitlist");
 
-    const currentJob = mockOpportunities[currentSwipeIndex];
+    if (!card) return;
 
-    if (direction === 'right') {
-        card.classList.add("animate-swipe-right");
-        if (!currentJob) return;
-        currentJob.status = "interested";
-        savedInterestedJobs.push(currentJob);
-        persistOpportunityState(currentJob, "interested");
-        showToast(`Saved ${currentJob.title} to Interested!`);
-    } else if (direction === 'left') {
-        card.classList.add("animate-swipe-left");
-        currentJob.status = "rejected";
-        showToast(`Dismissed ${currentJob.title}`);
-    } else if (direction === 'down') {
-        card.classList.add("animate-swipe-down");
-        currentJob.status = "waitlisted";
-        waitlistedJobs.push(currentJob);
-        persistOpportunityState(currentJob, "waitlisted");
-        showToast(`Added ${currentJob.title} to Waitlist`);
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let currentX = 0;
+    let currentY = 0;
+    let startTime = 0;
+
+    function onPointerDown(e) {
+        if (isSwipeAnimating) return;
+        // Don't start drag if clicking links or interactive elements
+        if (e.target.closest("a") || e.target.closest("button") || e.target.closest("input")) return;
+
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        currentX = 0;
+        currentY = 0;
+        startTime = Date.now();
+
+        card.style.transition = "none";
+        if (card.setPointerCapture) {
+            try { card.setPointerCapture(e.pointerId); } catch (_) {}
+        }
+    }
+
+    function onPointerMove(e) {
+        if (!isDragging || isSwipeAnimating) return;
+
+        const deltaX = e.clientX - startX;
+        let deltaY = e.clientY - startY;
+
+        // Damp upward movement slightly so user doesn't drag card off top accidentally
+        if (deltaY < 0) deltaY = deltaY * 0.35;
+
+        currentX = deltaX;
+        currentY = deltaY;
+
+        const rotation = (deltaX / 300) * 16;
+        card.style.transform = `translate(${deltaX}px, ${deltaY}px) rotate(${rotation}deg)`;
+
+        // Visual badges feedback
+        if (badgeInterested && badgeSkip && badgeWaitlist) {
+            if (deltaX > 15 && Math.abs(deltaX) >= deltaY * 0.8) {
+                const prog = Math.min(1, Math.max(0, (deltaX - 15) / 70));
+                badgeInterested.style.opacity = String(prog);
+                badgeSkip.style.opacity = "0";
+                badgeWaitlist.style.opacity = "0";
+            } else if (deltaX < -15 && Math.abs(deltaX) >= deltaY * 0.8) {
+                const prog = Math.min(1, Math.max(0, (-deltaX - 15) / 70));
+                badgeSkip.style.opacity = String(prog);
+                badgeInterested.style.opacity = "0";
+                badgeWaitlist.style.opacity = "0";
+            } else if (deltaY > 20 && deltaY > Math.abs(deltaX)) {
+                const prog = Math.min(1, Math.max(0, (deltaY - 20) / 55));
+                badgeWaitlist.style.opacity = String(prog);
+                badgeInterested.style.opacity = "0";
+                badgeSkip.style.opacity = "0";
+            } else {
+                badgeInterested.style.opacity = "0";
+                badgeSkip.style.opacity = "0";
+                badgeWaitlist.style.opacity = "0";
+            }
+        }
+
+        // Underneath card scaling effect
+        if (underCard) {
+            const dragProgress = Math.min(1, Math.max(Math.abs(deltaX) / 100, deltaY / 80));
+            underCard.style.transform = `scale(${0.95 + 0.05 * dragProgress}) translateY(${12 - 12 * dragProgress}px)`;
+            underCard.style.opacity = String(0.6 + 0.4 * dragProgress);
+        }
+    }
+
+    function onPointerUp(e) {
+        if (!isDragging) return;
+        isDragging = false;
+
+        if (card.releasePointerCapture) {
+            try { card.releasePointerCapture(e.pointerId); } catch (_) {}
+        }
+
+        const elapsed = Math.max(1, Date.now() - startTime);
+        const vx = currentX / elapsed;
+        const vy = currentY / elapsed;
+
+        const isHorizontal = Math.abs(currentX) > currentY * 0.9;
+        const isVerticalDown = currentY > 0 && currentY > Math.abs(currentX);
+
+        // Threshold checks
+        const rightTrigger = (currentX > 80) || (currentX > 35 && vx > 0.35 && isHorizontal);
+        const leftTrigger = (currentX < -80) || (currentX < -35 && vx < -0.35 && isHorizontal);
+        const downTrigger = isVerticalDown && ((currentY > 75) || (currentY > 35 && vy > 0.35));
+
+        if (rightTrigger) {
+            handleInterested();
+        } else if (leftTrigger) {
+            handleSkip();
+        } else if (downTrigger) {
+            handleWaitlist();
+        } else {
+            // Snap back smoothly
+            card.style.transition = "transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.25s ease";
+            card.style.transform = "translate(0px, 0px) rotate(0deg)";
+
+            if (badgeInterested) badgeInterested.style.opacity = "0";
+            if (badgeSkip) badgeSkip.style.opacity = "0";
+            if (badgeWaitlist) badgeWaitlist.style.opacity = "0";
+
+            if (underCard) {
+                underCard.style.transition = "transform 0.25s ease, opacity 0.25s ease";
+                underCard.style.transform = "scale(0.95) translateY(12px)";
+                underCard.style.opacity = "0.6";
+            }
+        }
+    }
+
+    card.addEventListener("pointerdown", onPointerDown);
+    card.addEventListener("pointermove", onPointerMove);
+    card.addEventListener("pointerup", onPointerUp);
+    card.addEventListener("pointercancel", onPointerUp);
+}
+
+function animateAndFinishSwipe(direction, callback) {
+    if (isSwipeAnimating) return;
+    isSwipeAnimating = true;
+
+    const card = document.getElementById("popupSwipeCard");
+    const underCard = document.getElementById("underSwipeCard");
+
+    if (card) {
+        card.style.transition = "transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.32s ease";
+        if (direction === "right") {
+            card.style.transform = "translate(130%, 20px) rotate(25deg)";
+            card.style.opacity = "0";
+            const badge = document.getElementById("badgeInterested");
+            if (badge) badge.style.opacity = "1";
+        } else if (direction === "left") {
+            card.style.transform = "translate(-130%, 20px) rotate(-25deg)";
+            card.style.opacity = "0";
+            const badge = document.getElementById("badgeSkip");
+            if (badge) badge.style.opacity = "1";
+        } else if (direction === "down") {
+            card.style.transform = "translate(0, 135%) scale(0.9)";
+            card.style.opacity = "0";
+            const badge = document.getElementById("badgeWaitlist");
+            if (badge) badge.style.opacity = "1";
+        }
+    }
+
+    if (underCard) {
+        underCard.style.transition = "transform 0.28s ease, opacity 0.28s ease";
+        underCard.style.transform = "scale(1) translateY(0px)";
+        underCard.style.opacity = "1";
     }
 
     setTimeout(() => {
+        try {
+            callback();
+        } finally {
+            isSwipeAnimating = false;
+        }
+    }, 310);
+}
+
+function handleInterested() {
+    if (isSwipeAnimating || currentSwipeIndex >= mockOpportunities.length) return;
+    const currentJob = mockOpportunities[currentSwipeIndex];
+    if (!currentJob) return;
+
+    animateAndFinishSwipe("right", () => {
+        undoSwipeStack.push({
+            job: currentJob,
+            action: "interested",
+            index: currentSwipeIndex
+        });
+
+        currentJob.status = "interested";
+        const key = `${currentJob.company}_${currentJob.title}`.toLowerCase().replace(/\s+/g, '_');
+        const alreadyIn = savedInterestedJobs.some(j => `${j.company}_${j.title}`.toLowerCase().replace(/\s+/g, '_') === key);
+        if (!alreadyIn) {
+            savedInterestedJobs.unshift(currentJob);
+        }
+
+        // Optimistic persistence to Supabase
+        persistOpportunityState(currentJob, "interested");
+        showToast(`Saved ${currentJob.title} to Interested!`);
+
         currentSwipeIndex++;
         updateStats();
         renderInterestedList();
+        renderTinderCard();
+    });
+}
+
+function handleSkip() {
+    if (isSwipeAnimating || currentSwipeIndex >= mockOpportunities.length) return;
+    const currentJob = mockOpportunities[currentSwipeIndex];
+    if (!currentJob) return;
+
+    animateAndFinishSwipe("left", () => {
+        undoSwipeStack.push({
+            job: currentJob,
+            action: "skip",
+            index: currentSwipeIndex
+        });
+
+        currentJob.status = "rejected";
+        showToast(`Dismissed ${currentJob.title}`);
+
+        currentSwipeIndex++;
+        updateStats();
+        renderTinderCard();
+    });
+}
+
+function handleWaitlist() {
+    if (isSwipeAnimating || currentSwipeIndex >= mockOpportunities.length) return;
+    const currentJob = mockOpportunities[currentSwipeIndex];
+    if (!currentJob) return;
+
+    animateAndFinishSwipe("down", () => {
+        undoSwipeStack.push({
+            job: currentJob,
+            action: "waitlisted",
+            index: currentSwipeIndex
+        });
+
+        currentJob.status = "waitlisted";
+        const key = `${currentJob.company}_${currentJob.title}`.toLowerCase().replace(/\s+/g, '_');
+        const alreadyIn = waitlistedJobs.some(j => `${j.company}_${j.title}`.toLowerCase().replace(/\s+/g, '_') === key);
+        if (!alreadyIn) {
+            waitlistedJobs.unshift(currentJob);
+        }
+
+        // Optimistic persistence to Supabase
+        persistOpportunityState(currentJob, "waitlisted");
+        showToast(`Added ${currentJob.title} to Waitlist`);
+
+        currentSwipeIndex++;
+        updateStats();
         renderWaitlistedList();
         renderTinderCard();
-    }, 320);
+    });
 }
+
+async function handleUndo() {
+    if (isSwipeAnimating || undoSwipeStack.length === 0) return;
+    const last = undoSwipeStack.pop();
+    if (!last || !last.job) return;
+
+    currentSwipeIndex = last.index;
+    last.job.status = "discovered";
+
+    const key = `${last.job.company}_${last.job.title}`.toLowerCase().replace(/\s+/g, '_');
+
+    if (last.action === "interested") {
+        savedInterestedJobs = savedInterestedJobs.filter(j => `${j.company}_${j.title}`.toLowerCase().replace(/\s+/g, '_') !== key);
+        renderInterestedList();
+        try {
+            const authHeaders = await getAuthHeader();
+            await fetch("/api/user/opportunities/remove", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", ...authHeaders },
+                body: JSON.stringify({ company: last.job.company, title: last.job.title }),
+                credentials: "same-origin"
+            });
+        } catch (e) {
+            console.warn("Undo sync remove error:", e);
+        }
+    } else if (last.action === "waitlisted") {
+        waitlistedJobs = waitlistedJobs.filter(j => `${j.company}_${j.title}`.toLowerCase().replace(/\s+/g, '_') !== key);
+        renderWaitlistedList();
+        try {
+            const authHeaders = await getAuthHeader();
+            await fetch("/api/user/opportunities/remove", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", ...authHeaders },
+                body: JSON.stringify({ company: last.job.company, title: last.job.title }),
+                credentials: "same-origin"
+            });
+        } catch (e) {
+            console.warn("Undo sync remove error:", e);
+        }
+    }
+
+    updateStats();
+    renderTinderCard();
+    showToast(`Restored ${last.job.title}`);
+}
+
+function handlePopupSwipe(direction) {
+    if (direction === 'right') handleInterested();
+    else if (direction === 'left') handleSkip();
+    else if (direction === 'down') handleWaitlist();
+}
+
 
 async function fetchContactDetails(company, title, btnElement) {
     const parentContainer = btnElement.parentElement.parentElement;

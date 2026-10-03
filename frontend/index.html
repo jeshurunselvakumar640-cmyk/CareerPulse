@@ -20,7 +20,9 @@
     </script>
     <link rel="stylesheet" href="/static/styles/dashboard.css?v=20261004_v13">
 
-    <!-- Progressive Web App -->
+    <!-- Favicon & PWA -->
+    <link rel="icon" type="image/png" href="/static/assets/logo.png">
+    <link rel="shortcut icon" type="image/png" href="/static/assets/logo.png">
     <link rel="manifest" href="/manifest.webmanifest">
     <meta name="theme-color" content="#090d16">
     <meta name="mobile-web-app-capable" content="yes">
@@ -1313,28 +1315,35 @@
                     <h3 class="text-base font-bold text-white">Opportunity Discovery</h3>
                     <p id="swipeProgressText" class="text-xs text-slate-400">Job 1 of 50</p>
                 </div>
-                <button onclick="closeTinderModal()"
-                    class="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold text-sm">&times;</button>
+                <div class="flex items-center gap-2">
+                    <button id="btnUndoSwipe" onclick="handleUndo()" title="Undo last swipe"
+                        class="hidden px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition border border-slate-700">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a5 5 0 0 1 5 5v2M3 10l6-6M3 10l6 6"/></svg>
+                        <span>Undo</span>
+                    </button>
+                    <button onclick="closeTinderModal()"
+                        class="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold text-sm transition">&times;</button>
+                </div>
             </div>
 
             <div id="tinderCardContainer" class="w-full"></div>
 
             <div class="flex justify-center items-center gap-4 pt-2">
-                <button onclick="handlePopupSwipe('left')" title="Dismiss"
-                    class="w-12 h-12 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 flex items-center justify-center transition shadow-lg">
+                <button onclick="handleSkip()" id="btnSwipeLeft" title="Skip (Swipe Left)"
+                    class="w-12 h-12 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 flex items-center justify-center transition shadow-lg hover:scale-105 active:scale-95">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
                             d="M6 18L18 6M6 6l12 12" />
                     </svg>
                 </button>
-                <button onclick="handlePopupSwipe('down')" title="Waitlist"
-                    class="w-12 h-12 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 flex items-center justify-center transition shadow-lg">
+                <button onclick="handleWaitlist()" id="btnSwipeDown" title="Waitlist (Swipe Down)"
+                    class="w-12 h-12 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 flex items-center justify-center transition shadow-lg hover:scale-105 active:scale-95">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 8v4l3 3" />
                     </svg>
                 </button>
-                <button onclick="handlePopupSwipe('right')" title="Interested"
-                    class="w-12 h-12 rounded-2xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 flex items-center justify-center transition shadow-lg">
+                <button onclick="handleInterested()" id="btnSwipeRight" title="Interested (Swipe Right)"
+                    class="w-12 h-12 rounded-2xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 flex items-center justify-center transition shadow-lg hover:scale-105 active:scale-95">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
                             d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />

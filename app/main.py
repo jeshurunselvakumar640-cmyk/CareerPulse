@@ -72,55 +72,12 @@ if mailbox_supabase is None:
     )
 
 # -------------------------------------------------------------------
-# NATIVE 5:00 AM AUTOMATED SCHEDULER
-# -------------------------------------------------------------------
-
-async def daily_5am_loop():
-    """Calculates time until next 5:00 AM IST and executes the daily digest automatically across users."""
-    tz = zoneinfo.ZoneInfo("Asia/Kolkata")
-    
-    while True:
-        now = datetime.now(tz)
-        target_time = now.replace(hour=5, minute=0, second=0, microsecond=0)
-        
-        if now >= target_time:
-            target_time += timedelta(days=1)
-            
-        seconds_to_wait = (target_time - now).total_seconds()
-        logger.info(f"⏰ Next automated daily digest scheduled in {seconds_to_wait / 3600:.2f} hours (at 5:00 AM IST).")
-        
-        await asyncio.sleep(seconds_to_wait)
-        
-        logger.info("⏰ Executing automated daily digest email dispatch at 5:00 AM IST...")
-        try:
-            # Query all registered user profiles from Supabase
-            profiles_res = supabase.table("user_profiles").select("*").execute()
-            profiles = profiles_res.data or []
-
-            for profile in profiles:
-                if not profile.get("email"):
-                    continue
-                user_profile = {
-                    "user_id": profile.get("id") or profile.get("user_id"),
-                    "name": profile.get("full_name") or profile.get("name", "User"),
-                    "email": profile["email"],
-                    "skills": profile.get("skills", []),
-                    "locations": profile.get("locations", ["Remote"]),
-                    "roles": profile.get("roles", ["Software Engineer"])
-                }
-                result = await send_daily_digest(user_profile, force=False)
-                logger.info(f"Automated 5:00 AM Digest result for {profile['email']}: {result}")
-        except Exception as e:
-            logger.error("Failed to execute scheduled 5:00 AM digest: %s", str(e))
-
-# -------------------------------------------------------------------
 # LIFECYCLE
 # -------------------------------------------------------------------
 
 @app.on_event("startup")
 async def on_startup():
-    logger.info("Initializing CareerPulse services and native 5:00 AM automated scheduler...")
-    asyncio.create_task(daily_5am_loop())
+    logger.info("Initializing CareerPulse services...")
 
 # -------------------------------------------------------------------
 # PYDANTIC SCHEMAS
@@ -1197,21 +1154,79 @@ async def get_digest_status(auth_tuple=Depends(require_auth_token_and_user)):
         "recent_records": local_history.get("sent_records", [])[-5:]
     }
 
-@app.post("/api/digest/send")
-async def trigger_digest_send(req: Optional[DigestTriggerRequest] = None, auth_tuple=Depends(require_auth_token_and_user)):
-    _, user = auth_tuple
-    force = req.force if req else False
-    metadata = user.user_metadata or {}
-    user_profile = {
-        "user_id": user.id,
-        "name": metadata.get("full_name") or metadata.get("name") or "User",
-        "email": user.email,
-        "skills": metadata.get("skills", []),
-        "locations": [metadata.get("location")] if metadata.get("location") else ["Remote"],
-        "roles": [metadata.get("headline")] if metadata.get("headline") else ["Software Engineer"]
-    }
+@app.api_route("/api/digest/send", methods=["GET", "POST"])
+async def trigger_digest_send(
+    request: Request,
+    req: Optional[DigestTriggerRequest] = None,
+    force: Optional[bool] = None,
+    authorization: Optional[str] = Header(None)
+):
+    """
+    Triggers the 24-hour daily technology & career opportunity digest.
+    Directly callable by Vercel Cron (HTTP GET) and frontend manual trigger (HTTP POST).
+    """
+    logger.info("digest: /api/digest/send endpoint invoked (method=%s)", request.method)
 
-    result = await send_daily_digest(user_profile, force=force)
+    token, user = get_current_token_and_user(request, authorization)
+    force_flag = (req.force if req and req.force is not None else False) or (force is True)
+
+    if user:
+        metadata = user.user_metadata or {}
+        user_profile = {
+            "user_id": user.id,
+            "name": metadata.get("full_name") or metadata.get("name") or "User",
+            "email": user.email,
+            "skills": metadata.get("skills", []),
+            "locations": [metadata.get("location")] if metadata.get("location") else ["Remote"],
+            "roles": [metadata.get("headline")] if metadata.get("headline") else ["Software Engineer"]
+        }
+        logger.info("digest: digest generation started for authenticated user=%s", user.id)
+        result = await send_daily_digest(user_profile, force=force_flag)
+        logger.info("digest: final response status: %s", result.get("status"))
+        return result
+
+    # Vercel Cron / automated dispatch (no user session)
+    logger.info("digest: automated cron dispatch invoked")
+    profiles = []
+    try:
+        client_to_use = mailbox_supabase or supabase
+        res = client_to_use.table("resume_profiles").select("*").execute()
+        profiles = res.data or []
+    except Exception as e:
+        logger.warning("digest: could not query resume_profiles: %s", e)
+
+    if profiles:
+        results = []
+        for p in profiles:
+            p_profile = {
+                "user_id": p.get("user_id") or p.get("id") or "candidate_default_user",
+                "name": p.get("name") or "Jeshurun Selvakumar",
+                "email": p.get("email") or settings.recipient_email or settings.smtp_user,
+                "skills": ["Python", "Java", "C", "React", "JavaScript", "SQL", "FastAPI"],
+                "locations": [p.get("city") or "Mumbai", "Remote"],
+                "roles": [p.get("headline") or "Software Engineer Intern"]
+            }
+            if not p_profile["email"]:
+                continue
+            logger.info("digest: digest generation started for candidate=%s", p_profile["email"])
+            r = await send_daily_digest(p_profile, force=force_flag)
+            results.append(r)
+
+        final_status = "success" if any(r.get("status") == "success" for r in results) else (results[0].get("status") if results else "success")
+        logger.info("digest: final response status: %s", final_status)
+        return results[0] if len(results) == 1 else {"status": final_status, "results": results}
+
+    default_profile = {
+        "user_id": "candidate_default_user",
+        "name": "Jeshurun Selvakumar",
+        "email": settings.recipient_email or settings.smtp_user or "jeshurunselvakumar640@gmail.com",
+        "skills": ["Python", "Java", "C", "React", "JavaScript", "SQL", "FastAPI"],
+        "locations": ["Mumbai", "Navi Mumbai", "Remote"],
+        "roles": ["Software Engineer Intern", "Backend Developer Intern", "AI ML Intern"]
+    }
+    logger.info("digest: digest generation started for default candidate profile")
+    result = await send_daily_digest(default_profile, force=force_flag)
+    logger.info("digest: final response status: %s", result.get("status"))
     return result
 
 # -------------------------------------------------------------------

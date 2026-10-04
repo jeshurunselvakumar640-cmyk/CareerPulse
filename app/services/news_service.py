@@ -581,6 +581,9 @@ def fetch_and_verify_technology_news(max_stories: int = 6) -> List[Dict[str, Any
                 story.setdefault("why_it_matters",
                                  "Significant technical and industry development.")
                 story.setdefault("category", "Technology")
+        logger.info("digest: Gemini summarization completed (%d stories processed)", len(selected))
+    else:
+        logger.info("digest: Gemini summarization completed (0 stories processed)")
 
     final = [s for s in selected if s.get("is_verified") and s.get("is_current")]
     logger.info("digest: final verified news count = %d", len(final))

@@ -152,6 +152,7 @@ async def send_daily_digest(user_profile: Dict[str, Any], force: bool = False) -
     # 3. Job Pipeline (verified individual opportunities only)
     raw_jobs = await asyncio.to_thread(discover_and_extract_opportunities, user_profile, 6)
     logger.info("digest: job candidates after validation = %d", len(raw_jobs))
+    logger.info("digest: search completed (news_count=%d, jobs_count=%d)", len(news_items), len(raw_jobs))
 
     scored_jobs = []
     for job in raw_jobs:
@@ -164,6 +165,7 @@ async def send_daily_digest(user_profile: Dict[str, Any], force: bool = False) -
         job["preferred_skills"] = display_skills(job.get("preferred_skills") or [])
         scored_jobs.append(job)
     logger.info("digest: jobs verified and eligible = %d", len(scored_jobs))
+    logger.info("digest: Gemini summarization completed")
 
     # 4. Skill gaps, from verified opportunities only
     gap_counts: Dict[str, int] = {}
@@ -194,6 +196,7 @@ async def send_daily_digest(user_profile: Dict[str, Any], force: bool = False) -
                 len(html_body), len(plain_body))
 
     # 6. Send Email via SMTP in worker thread
+    logger.info("digest: email send attempted to %s", recipient_email)
     try:
         await asyncio.to_thread(
             send_email,
@@ -202,9 +205,9 @@ async def send_daily_digest(user_profile: Dict[str, Any], force: bool = False) -
             body=plain_body,
             html_body=html_body
         )
-        logger.info("digest: email sent to %s", recipient_email)
+        logger.info("digest: email send succeeded to %s", recipient_email)
     except Exception as e:
-        logger.error("Failed to send daily digest email via SMTP: %s", e)
+        logger.error("digest: email send failed to %s: %s", recipient_email, e)
         return {"status": "error", "message": f"SMTP dispatch failed: {str(e)}"}
 
     # 6. Record Idempotency Logging
@@ -220,7 +223,7 @@ async def send_daily_digest(user_profile: Dict[str, Any], force: bool = False) -
             "opportunity_id": digest_key,
             "recipient_email": recipient_email,
             "subject": subject,
-            "body": email_body[:800] + "... [digest truncated]",
+            "body": plain_body[:800] + "... [digest truncated]",
             "status": "Sent"
         }).execute()
     except Exception as e:

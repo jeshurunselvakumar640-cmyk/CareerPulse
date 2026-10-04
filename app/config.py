@@ -49,11 +49,17 @@ class Settings:
             # openid/userinfo.* resolve the account address; gmail.readonly is
             # the mailbox read grant and is what actually authorizes
             # users/me/profile, the endpoint that reports emailAddress.
+            # calendar.events is the only write grant. It is requested so a
+            # confirmed interview can become a real calendar event, and it is
+            # requested in the same consent step as Gmail rather than through a
+            # second authorization. Gmail reading never depends on it: every
+            # calendar call is optional and degrades to "not created".
             self.gmail_scopes = [
                 "openid",
                 "https://www.googleapis.com/auth/userinfo.email",
                 "https://www.googleapis.com/auth/userinfo.profile",
                 "https://www.googleapis.com/auth/gmail.readonly",
+                "https://www.googleapis.com/auth/calendar.events",
             ]
             # Fernet key used to encrypt OAuth refresh tokens at rest.
             # When unset, a key is derived from the Supabase key (still
@@ -62,6 +68,14 @@ class Settings:
             self.mailbox_token_encryption_key = os.getenv("MAILBOX_TOKEN_ENCRYPTION_KEY", "")
             # Seconds a user must wait between automatic mailbox syncs.
             self.mailbox_sync_min_interval = int(os.getenv("MAILBOX_SYNC_MIN_INTERVAL", "300"))
+            # Shared secret for the scheduler-invoked reply sync endpoint
+            # (/api/cron/sync-replies). Deliberately has NO default: when unset
+            # the endpoint refuses every caller rather than running with a
+            # guessable key. Set this to a long random value in the deployment
+            # environment; an external scheduler presents it in X-Sync-Secret.
+            self.sync_cron_secret = os.getenv("SYNC_CRON_SECRET", "").strip()
+            # Users processed per scheduler invocation, to bound one run.
+            self.sync_cron_max_users = int(os.getenv("SYNC_CRON_MAX_USERS", "25"))
 
             # AI & Search Settings
             self.primary_model = os.getenv("PRIMARY_MODEL", "gemini-3.5-flash-lite")
@@ -93,9 +107,12 @@ class Settings:
                 "https://www.googleapis.com/auth/userinfo.email",
                 "https://www.googleapis.com/auth/userinfo.profile",
                 "https://www.googleapis.com/auth/gmail.readonly",
+                "https://www.googleapis.com/auth/calendar.events",
             ]
             self.mailbox_token_encryption_key = ""
             self.mailbox_sync_min_interval = 300
+            self.sync_cron_secret = ""
+            self.sync_cron_max_users = 25
             self.primary_model = "gemini-3.5-flash-lite"
             self.fallback_model = "gemini-3.1-flash-lite"
             self.search_topic = "general"

@@ -609,10 +609,32 @@ check("integration status reports the connected mailbox", status.get("connected"
 check("integration status never exposes tokens",
       not any(k in status for k in ("access_token_encrypted", "refresh_token_encrypted",
                                     "access_token", "refresh_token")))
-check("integration status only requests read-only scopes",
-      all("readonly" in s or "userinfo" in s or s == "openid" for s in status.get("scopes", []))
-      and not any(s.endswith(".send") or "modify" in s for s in status.get("scopes", [])),
-      status.get("scopes"))
+
+# Every MAILBOX scope must stay read-only: CareerPulse may never send, modify,
+# label or delete mail through this grant.
+_mail_scopes = [s for s in status.get("scopes", [])
+                if "calendar" not in s]
+check("all mailbox scopes remain read-only",
+      all("readonly" in s or "userinfo" in s or s == "openid" for s in _mail_scopes)
+      and not any(s.endswith(".send") or "modify" in s for s in _mail_scopes),
+      _mail_scopes)
+
+# calendar.events is the single, deliberately-approved write grant. It must not
+# be anything broader: full calendar read/write, drive or gmail.send/modify would
+# all be over-privileged.
+_calendar_scopes = [s for s in status.get("scopes", []) if "calendar" in s]
+check("calendar.events is requested and is the only write scope",
+      _calendar_scopes == ["https://www.googleapis.com/auth/calendar.events"],
+      _calendar_scopes)
+check("no over-privileged Google scope is requested",
+      not any(s in status.get("scopes", []) for s in (
+          "https://www.googleapis.com/auth/calendar",
+          "https://www.googleapis.com/auth/calendar.readonly",
+          "https://www.googleapis.com/auth/gmail.send",
+          "https://www.googleapis.com/auth/gmail.modify",
+          "https://www.googleapis.com/auth/gmail.compose",
+          "https://www.googleapis.com/auth/drive",
+      )), status.get("scopes"))
 
 
 def run_sync(force=True):

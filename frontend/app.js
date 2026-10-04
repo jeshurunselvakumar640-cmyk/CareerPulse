@@ -22,6 +22,18 @@ const applicationsState = {
 
 let currentConversationId = null;
 
+// Dedicated application page state.
+// `opportunityId` is the ONLY identity used here. Company name is never used to
+// look an application up, so two applications at one company, or two similar
+// job titles, always resolve to separate pages with separate data.
+const applicationWorkspaceState = {
+    opportunityId: null,
+    data: null,
+    activeTab: "overview",
+    loading: false,
+    error: ""
+};
+
 // Global auth state — prevents rendering before auth is resolved
 const authState = {
     loading: true,
@@ -3478,6 +3490,17 @@ function resetApplicationsState() {
     applicationsState.syncNotice = null;
     currentConversationId = null;
 
+    // Clear the dedicated application page too, so one account can never see
+    // another account's application detail.
+    applicationWorkspaceState.opportunityId = null;
+    applicationWorkspaceState.data = null;
+    applicationWorkspaceState.activeTab = "overview";
+    applicationWorkspaceState.error = "";
+    ["applicationDetailHeader", "applicationTabPanel"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = "";
+    });
+
     ["applicationsContainer", "mailboxIntegrationCard", "repliesNotification"].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.innerHTML = "";
@@ -3702,15 +3725,409 @@ function renderApplicationsList() {
             ${isReplied ? `<p class="text-[11px] text-slate-300 italic border-l-2 border-slate-700 pl-2">${escapeHtml(preview)}</p>` : ""}
 
             <div class="flex flex-wrap gap-2">
+                <button onclick="openApplication('${escapeHtml(app.opportunity_id).replace(/'/g, "\\'")}')"
+                    class="px-3.5 py-1.5 rounded-lg ${unread ? "bg-indigo-600 hover:bg-indigo-500 text-white" : "bg-slate-800 hover:bg-slate-700 text-slate-200"} text-xs font-bold transition">Open Application</button>
                 <button onclick="openConversation('${escapeHtml(app.opportunity_id).replace(/'/g, "\\'")}')"
-                    class="px-3.5 py-1.5 rounded-lg ${unread ? "bg-indigo-600 hover:bg-indigo-500 text-white" : "bg-slate-800 hover:bg-slate-700 text-slate-200"} text-xs font-bold transition">View Conversation</button>
+                    class="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition">View Conversation</button>
             </div>
         </div>`;
     }).join("");
 }
 
-async function loadMailboxStatus() {
+/* ------------------------------------------------------------------
+ * DEDICATED APPLICATION PAGE
+ *
+ * Every panel below renders from GET /api/applications/{opportunity_id},
+ * which is scoped by user_id AND opportunity_id on the server. The page
+ * therefore only ever shows data belonging to the application that was
+ * opened.
+ * ------------------------------------------------------------------ */
+
+function applicationTabButtonStyle(active) {
+    return active
+        ? "bg-indigo-600 text-white"
+        : "bg-slate-800 hover:bg-slate-700 text-slate-200";
+}
+
+function selectApplicationTab(tab) {
+    // Switching tabs is a pure client-side re-render: no refetch, no navigation,
+    // and applicationWorkspaceState.opportunityId is deliberately left untouched
+    // so the same application stays open throughout.
+    applicationWorkspaceState.activeTab = tab;
+    document.querySelectorAll(".application-tab").forEach(btn => {
+        const isActive = btn.dataset.applicationTab === tab;
+        btn.className = `application-tab px-4 py-2 rounded-xl text-xs font-bold transition ${applicationTabButtonStyle(isActive)}`;
+        btn.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
+    renderApplicationTabPanel();
+}
+
+async function openApplication(opportunityId) {
+    if (!opportunityId) return;
+    applicationWorkspaceState.opportunityId = opportunityId;
+    applicationWorkspaceState.data = null;
+    applicationWorkspaceState.activeTab = "overview";
+    applicationWorkspaceState.error = "";
+    navigateTo("application-detail");
+    selectApplicationTab("overview");
+    await loadApplicationDetail(opportunityId);
+}
+
+async function loadApplicationDetail(opportunityId) {
+    const header = document.getElementById("applicationDetailHeader");
+    const panel = document.getElementById("applicationTabPanel");
+    applicationWorkspaceState.loading = true;
+    if (panel) {
+        panel.innerHTML = `<div class="p-8 rounded-2xl bg-slate-900 border border-slate-800 text-center">
+            <p class="text-sm text-slate-400">Loading this application&hellip;</p></div>`;
+    }
+
     try {
+        const response = await fetch(`/api/applications/${encodeURIComponent(opportunityId)}`);
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || "Could not load this application.");
+        if (!payload.found) {
+            applicationWorkspaceState.data = null;
+            applicationWorkspaceState.error = "This application was not found.";
+            if (header) {
+                header.innerHTML = `<p class="text-sm text-slate-400">This application was not found.</p>`;
+            }
+            if (panel) panel.innerHTML = "";
+            return;
+        }
+        applicationWorkspaceState.data = payload;
+        renderApplicationSyncStatus(payload);
+        renderApplicationHeader(payload);
+        renderApplicationTabPanel();
+    } catch (err) {
+        applicationWorkspaceState.error = err.message || "Could not load this application.";
+        if (header) {
+            header.innerHTML = `<p class="text-sm text-rose-300">${escapeHtml(applicationWorkspaceState.error)}</p>`;
+        }
+        if (panel) panel.innerHTML = "";
+    } finally {
+        applicationWorkspaceState.loading = false;
+    }
+}
+
+function renderApplicationHeader(payload) {
+    const header = document.getElementById("applicationDetailHeader");
+    if (!header) return;
+    const overview = payload.overview || {};
+    const tone = applicationStatusTone(overview.status);
+    const interviews = payload.interviews || [];
+
+    header.innerHTML = `
+        <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div class="min-w-0">
+                <h3 class="text-lg font-extrabold text-white truncate">${escapeHtml(overview.company || "Unknown company")}</h3>
+                <p class="text-xs text-indigo-400 truncate">${escapeHtml(overview.position || "")}</p>
+            </div>
+            <span class="self-start px-2.5 py-1 rounded-lg bg-${tone}-500/15 text-${tone}-300 border border-${tone}-500/30 text-[10px] font-bold uppercase tracking-wide shrink-0">${escapeHtml(overview.status || "Unknown")}</span>
+        </div>
+        <div class="flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-slate-400">
+            ${overview.last_sent_at ? `<span>&#10003; Applied ${escapeHtml(formatTimestamp(overview.last_sent_at))}</span>` : ""}
+            ${overview.reply_count ? `<span>&#128172; ${overview.reply_count} repl${overview.reply_count === 1 ? "y" : "ies"}</span>` : ""}
+            ${overview.last_reply_at ? `<span>Last reply ${escapeHtml(formatTimestamp(overview.last_reply_at))}</span>` : ""}
+            ${interviews.length ? `<span>&#128197; ${interviews.length} interview${interviews.length === 1 ? "" : "s"}</span>` : ""}
+        </div>`;
+}
+
+function applicationEmptyState(message) {
+    return `<div class="p-8 rounded-2xl bg-slate-900 border border-slate-800 text-center">
+        <p class="text-sm text-slate-400">${escapeHtml(message)}</p></div>`;
+}
+
+function renderApplicationTabPanel() {
+    const panel = document.getElementById("applicationTabPanel");
+    if (!panel) return;
+    const payload = applicationWorkspaceState.data;
+    if (!payload) return;
+
+    const tab = applicationWorkspaceState.activeTab;
+    if (tab === "overview") panel.innerHTML = renderApplicationOverview(payload);
+    else if (tab === "timeline") panel.innerHTML = renderApplicationTimeline(payload);
+    else if (tab === "replies") panel.innerHTML = renderApplicationReplies(payload);
+    else if (tab === "nextsteps") panel.innerHTML = renderApplicationNextSteps(payload);
+    else if (tab === "interview") panel.innerHTML = renderApplicationInterview(payload);
+}
+
+function renderApplicationOverview(payload) {
+    const overview = payload.overview || {};
+    const interview = (payload.interviews || [])[0];
+    const latest = (payload.next_steps || [])[0];
+    const warnings = payload.warnings || [];
+    // The single most recent extracted step, shown as this application's next
+    // action. Only ever real extracted text - never a generic prompt.
+    const nextAction = latest && (latest.steps || []).length
+        ? String(latest.steps[0]).replace(/^\d+[\.\)]\s*/, "")
+        : "";
+
+    return `
+        ${warnings.length ? `<div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-300 space-y-1">
+            ${warnings.map(w => `<p>${escapeHtml(w)}</p>`).join("")}</div>` : ""}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            ${[
+                ["Company", overview.company],
+                ["Role", overview.position],
+                ["Application status", overview.status],
+                ["Last activity", overview.last_reply_at
+                    ? formatTimestamp(overview.last_reply_at)
+                    : (overview.last_sent_at ? formatTimestamp(overview.last_sent_at) : "")],
+                ["Applied", overview.last_sent_at ? formatTimestamp(overview.last_sent_at) : ""],
+                ["Replies received", String(overview.reply_count ?? 0)],
+                ["Unread", String(overview.unread_count ?? 0)],
+                ["Contact email", overview.recipient_email],
+                ["Subject sent", overview.subject],
+                ["Interview", interview ? formatTimestamp(interview.starts_at) : ""]
+            ].filter(([, v]) => v).map(([label, value]) => `
+                <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+                    <p class="text-[10px] font-bold uppercase tracking-wider text-slate-500">${escapeHtml(label)}</p>
+                    <p class="text-sm text-slate-200 mt-1 break-words">${escapeHtml(value)}</p>
+                </div>`).join("")}
+            ${nextAction ? `
+                <div class="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 md:col-span-2">
+                    <p class="text-[10px] font-bold uppercase tracking-wider text-indigo-300">Next action</p>
+                    <p class="text-sm text-slate-100 mt-1">${escapeHtml(nextAction)}</p>
+                </div>` : ""}
+        </div>
+        <div class="flex flex-wrap gap-2">
+            <button onclick="openConversation('${escapeHtml(payload.opportunity_id).replace(/'/g, "\\'")}')"
+                class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition">Open Full Conversation</button>
+            <button onclick="selectApplicationTab('nextsteps')"
+                class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition">Next Steps</button>
+        </div>`;
+}
+
+function renderApplicationTimeline(payload) {
+    const events = payload.timeline || [];
+    if (!events.length) {
+        return applicationEmptyState("No application events recorded yet.");
+    }
+
+    // Friendly labels for the workspace event types. Only real, stored events
+    // reach this list - nothing is generated to fill a gap.
+    const EVENT_LABELS = {
+        application_sent: "Application submitted",
+        application_received: "Application received",
+        acknowledgement: "Application acknowledged",
+        recruiter_reply: "Recruiter reply received",
+        interview_requested: "Interview requested",
+        interview_scheduled: "Interview scheduled",
+        interview_details_captured: "Interview date captured",
+        interview_unconfirmed: "Interview mentioned, not scheduled",
+        information_requested: "Additional information requested",
+        follow_up: "Follow-up required",
+        rejection: "Rejected",
+        next_steps_extracted: "Reply analyzed",
+        calendar_event_created: "Added to Google Calendar"
+    };
+
+    return `
+        <div class="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+            ${events.map(event => `
+                <div class="flex gap-3">
+                    <div class="mt-1 w-2 h-2 rounded-full bg-indigo-400 shrink-0"></div>
+                    <div class="min-w-0">
+                        <p class="text-xs font-bold text-white">${escapeHtml(
+                            EVENT_LABELS[event.event_type] || event.title || event.event_type || "")}</p>
+                        <p class="text-[10px] text-slate-500">${escapeHtml(event.occurred_at ? formatTimestamp(event.occurred_at) : "")}</p>
+                        ${event.detail ? `<p class="text-[11px] text-slate-400 mt-1">${escapeHtml(event.detail)}</p>` : ""}
+                    </div>
+                </div>`).join("")}
+        </div>`;
+}
+
+function renderApplicationReplies(payload) {
+    const replies = payload.replies || [];
+    if (!replies.length) {
+        return applicationEmptyState("No replies received for this application yet.");
+    }
+    return `<div class="space-y-3">${replies.map(reply => `
+        <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
+            <div class="flex flex-col sm:flex-row sm:justify-between gap-1">
+                <p class="text-xs font-bold text-white truncate">${escapeHtml(reply.sender_name || reply.sender_email || "Unknown sender")}</p>
+                <p class="text-[10px] text-slate-500 shrink-0">${escapeHtml(reply.received_at ? formatTimestamp(reply.received_at) : "")}</p>
+            </div>
+            <p class="text-[11px] text-indigo-400 truncate">${escapeHtml(reply.subject || "(no subject)")}</p>
+            <p class="text-[11px] text-slate-300 whitespace-pre-wrap break-words">${escapeHtml((reply.body_text || "").slice(0, 1200))}${(reply.body_text || "").length > 1200 ? "&hellip;" : ""}</p>
+            <div class="flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+                ${reply.classification ? `<span class="px-2 py-0.5 rounded bg-slate-800 border border-slate-700">${escapeHtml(reply.classification)}</span>` : ""}
+                <span>Analysis: ${escapeHtml(reply.analysis_state || "pending")}</span>
+                ${reply.match_method ? `<span>Matched by: ${escapeHtml(reply.match_method)}</span>` : ""}
+            </div>
+        </div>`).join("")}</div>`;
+}
+
+function renderApplicationNextSteps(payload) {
+    const entries = payload.next_steps || [];
+    if (!entries.length) {
+        return applicationEmptyState(
+            "No next steps have been extracted yet. Sync replies and CareerPulse will analyze them.");
+    }
+    return `<div class="space-y-3">${entries.map(entry => `
+        <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
+            <p class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Next Steps</p>
+            <p class="text-[11px] text-slate-400">
+                From ${escapeHtml(entry.sender_name || entry.sender_email || "a company reply")}
+                ${entry.received_at ? `&middot; ${escapeHtml(formatTimestamp(entry.received_at))}` : ""}
+            </p>
+            <ol class="space-y-1 list-decimal list-inside text-xs text-slate-200">
+                ${(entry.steps || []).map(step => `<li>${escapeHtml(String(step).replace(/^\d+[\.\)]\s*/, ""))}</li>`).join("")}
+            </ol>
+            ${entry.interview_at ? `<p class="text-[11px] text-emerald-300">Interview detected: ${escapeHtml(formatTimestamp(entry.interview_at))}${entry.interview_timezone ? ` (${escapeHtml(entry.interview_timezone)})` : ""}${entry.timezone_confirmed ? "" : " &mdash; timezone not stated in the email"}</p>` : ""}
+            ${entry.analysis_error ? `<p class="text-[11px] text-amber-300">Analysis note: ${escapeHtml(entry.analysis_error)}</p>` : ""}
+        </div>`).join("")}</div>`;
+}
+
+const CALENDAR_STATUS_LABELS = {
+    created: "Added",
+    not_created: "Not added",
+    scope_missing: "Calendar connection required",
+    awaiting_timezone_confirmation: "Waiting for timezone",
+    not_connected: "Calendar connection required",
+    auth_error: "Calendar connection required",
+    token_error: "Calendar connection required",
+    rate_limited: "Rate limited by Google",
+    provider_error: "Could not reach Google Calendar"
+};
+
+function renderApplicationInterview(payload) {
+    const interviews = payload.interviews || [];
+    const calendarAvailable = payload.calendar_available === true;
+
+    // PART 8: a missing calendar grant is stated, never silently swallowed.
+    let banner = "";
+    if (!calendarAvailable) {
+        banner = `<div class="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-300">
+            <p class="font-bold">Calendar connection required</p>
+            <p class="mt-1">Reconnect Google on the Applications page to allow interview events to be added.
+            Gmail reading and reply tracking keep working without it.</p>
+        </div>`;
+    }
+
+    if (!interviews.length) {
+        return `${banner}${applicationEmptyState(
+            "No interview with a confirmed date and time was found for this application."
+        )}`;
+    }
+
+    return `${banner}<div class="space-y-3">${interviews.map(interview => {
+        const status = interview.calendar_status || "not_created";
+        const calendarLabel = CALENDAR_STATUS_LABELS[status] || status;
+        const calendarTone = status === "created" ? "text-emerald-300" : "text-amber-300";
+        const startsAt = interview.starts_at ? new Date(interview.starts_at) : null;
+        const dateText = startsAt && !isNaN(startsAt)
+            ? startsAt.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })
+            : "";
+        const timeText = startsAt && !isNaN(startsAt)
+            ? startsAt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+            : "";
+        const reminderLabel = interview.reminder_status === "surfaced" ? "Enabled" : "Not set";
+
+        return `
+        <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
+            <div class="flex flex-col sm:flex-row sm:justify-between gap-1">
+                <p class="text-sm font-bold text-white truncate">${escapeHtml(payload.overview?.company || "Interview")}</p>
+                <span class="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shrink-0">Scheduled</span>
+            </div>
+            <p class="text-[11px] text-slate-400">${escapeHtml(payload.overview?.position || "")}</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-1 text-[11px] text-slate-300">
+                <span><span class="text-slate-500">Date:</span> ${escapeHtml(dateText || formatTimestamp(interview.starts_at))}</span>
+                <span><span class="text-slate-500">Time:</span> ${escapeHtml(timeText)}</span>
+                <span><span class="text-slate-500">Timezone:</span> ${escapeHtml(interview.timezone || "not stated in email")}</span>
+                ${interview.interview_type ? `<span><span class="text-slate-500">Type:</span> ${escapeHtml(interview.interview_type)}</span>` : ""}
+                ${interview.location ? `<span><span class="text-slate-500">Location:</span> ${escapeHtml(interview.location)}</span>` : ""}
+                ${interview.meeting_link ? `<span class="break-all"><span class="text-slate-500">Link:</span> ${escapeHtml(interview.meeting_link)}</span>` : ""}
+                <span><span class="text-slate-500">Google Calendar:</span> <span class="${calendarTone}">${escapeHtml(calendarLabel)}</span></span>
+                <span><span class="text-slate-500">Reminder:</span> <span class="${interview.reminder_status === "surfaced" ? "text-emerald-300" : "text-slate-400"}">${escapeHtml(reminderLabel)}</span></span>
+            </div>
+            ${interview.calendar_error ? `<p class="text-[11px] text-amber-300">${escapeHtml(interview.calendar_error)}</p>` : ""}
+            <div class="flex flex-wrap gap-2 pt-1">
+                ${status !== "created"
+                    ? `<button onclick="createInterviewCalendarEvent('${escapeHtml(payload.opportunity_id).replace(/'/g, "\\'")}', '${escapeHtml(interview.id)}')"
+                        class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition">Add to Calendar</button>`
+                    : ""}
+                ${!interview.timezone_confirmed
+                    ? `<button onclick="confirmInterviewTimezone('${escapeHtml(payload.opportunity_id).replace(/'/g, "\\'")}', '${escapeHtml(interview.id)}')"
+                        class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition">Confirm timezone</button>`
+                    : ""}
+            </div>
+        </div>`;
+    }).join("")}</div>`;
+}
+
+/*
+ * PART 11 sync transparency.
+ *
+ * The scheduler runs on an approximate cadence, so no exact "next sync" time is
+ * claimed. Nothing here exposes a token, a key or a raw provider error.
+ */
+function renderApplicationSyncStatus(payload) {
+    const host = document.getElementById("applicationSyncStatus");
+    if (!host) return;
+
+    const lastSyncAt = payload.last_sync_at
+        || (applicationsState.integration && applicationsState.integration.last_sync_at);
+    const failed = Boolean(payload.last_sync_error)
+        || Boolean(applicationsState.integration && applicationsState.integration.last_sync_error);
+    const connected = payload.gmail_connected !== undefined
+        ? payload.gmail_connected
+        : Boolean(applicationsState.integration && applicationsState.integration.connected);
+
+    const parts = [];
+    if (!connected) {
+        parts.push('<span class="text-rose-300">Gmail is disconnected &mdash; no automatic checks are running.</span>');
+    }
+    parts.push(lastSyncAt
+        ? `<span>Last checked ${escapeHtml(formatTimestamp(lastSyncAt))}</span>`
+        : `<span>Not checked yet</span>`);
+    if (failed) {
+        parts.push('<span class="text-amber-300">Last check did not complete. CareerPulse retries automatically.</span>');
+    } else {
+        parts.push('<span>Automatic checks run about every 30 minutes.</span>');
+    }
+    host.innerHTML = parts.join("");
+}
+
+async function createInterviewCalendarEvent(opportunityId, interviewId) {
+    try {
+        const response = await fetch(
+            `/api/applications/${encodeURIComponent(opportunityId)}/interviews/${encodeURIComponent(interviewId)}/calendar`,
+            { method: "POST" });
+        const payload = await response.json();
+        const result = payload.calendar || {};
+        if (result.created) showToast("Interview added to your calendar.");
+        else showToast(result.error || "The calendar event could not be created.");
+        await loadApplicationDetail(opportunityId);
+    } catch (err) {
+        showToast(err.message || "The calendar event could not be created.");
+    }
+}
+
+async function confirmInterviewTimezone(opportunityId, interviewId) {
+    // CareerPulse never guesses a timezone, so this always asks the user.
+    const timezoneText = prompt(
+        "The email did not state a timezone.\nEnter the interview timezone (for example Asia/Kolkata or UTC+05:30):");
+    if (!timezoneText || !timezoneText.trim()) return;
+    try {
+        const response = await fetch(
+            `/api/applications/${encodeURIComponent(opportunityId)}/interviews/${encodeURIComponent(interviewId)}/timezone`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ timezone: timezoneText.trim() })
+            });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || "Could not confirm the timezone.");
+        showToast("Timezone confirmed.");
+        await loadApplicationDetail(opportunityId);
+    } catch (err) {
+        showToast(err.message || "Could not confirm the timezone.");
+    }
+}
+
+async function loadMailboxStatus() {    try {
         const authHeaders = await getAuthHeader();
         const res = await fetch("/api/email/integration/status", {
             headers: { ...authHeaders },

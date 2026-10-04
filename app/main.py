@@ -37,6 +37,7 @@ from app.services import gmail_client
 from app.services.gmail_client import MailboxError, MailboxNotConfigured
 from app.services import reply_tracker
 from app.services.reply_tracker import MigrationRequired
+from app.services import application_workspace
 from app.services import resume_service
 
 logging.basicConfig(
@@ -150,6 +151,9 @@ class ReplySyncRequest(BaseModel):
 
 class ReplyDraftRequest(BaseModel):
     opportunity_id: str
+
+class InterviewTimezoneRequest(BaseModel):
+    timezone: str
 
 class ResumePersonalDetailsRequest(BaseModel):
     profile_picture_url: Optional[str] = ""
@@ -1067,6 +1071,26 @@ async def sync_email_replies(req: Optional[ReplySyncRequest] = None, auth_tuple=
     if result.get("status") == "error":
         error_code = result.get("error_code") or "mailbox_error"
         raise HTTPException(status_code=_mailbox_error_status(error_code), detail=result.get("message") or _mailbox_error_detail(error_code))
+
+    # Application workspace: extract grounded next steps for the replies this
+    # sync just stored, and create a calendar event for any interview that
+    # stated a definite date and time.
+    #
+    # This is strictly additive and strictly isolated. The sync result above is
+    # already final; if Gemini or Calendar is unavailable the reply is still
+    # stored and still reported, exactly as before this feature existed. The
+    # outcome is attached under "workspace" purely so the user can see what was
+    # done (PART 17 transparency).
+    if result.get("inserted"):
+        try:
+            analysis = await application_workspace.process_new_replies(
+                _mailbox_db(), user.id, result.get("new_reply_ids") or None
+            )
+        except Exception as e:  # noqa: BLE001 - never fail a completed sync
+            logger.warning("Application workspace analysis skipped: %s", e)
+            analysis = {"processed": 0, "analyzed": 0, "failed": 0, "error": str(e)[:200]}
+        result["workspace"] = analysis
+
     return result
 
 @app.get("/api/email/replies")
@@ -1118,6 +1142,229 @@ async def get_opportunity_conversation(opportunity_id: str, auth_tuple=Depends(r
     """Full chronological conversation for one opportunity of this user."""
     _, user = auth_tuple
     return reply_tracker.get_conversation(_mailbox_db(), user.id, opportunity_id)
+
+# -------------------------------------------------------------------
+# APPLICATION WORKSPACE
+#
+# Additive endpoints only. Each one is scoped to a single application by
+# opportunity_id and by user_id, so two applications at the same company, or
+# two similar job titles, can never read each other's data.
+#
+# Every handler is failure-isolated: the workspace degrades a single section
+# rather than failing the request, and no existing route above is altered.
+# -------------------------------------------------------------------
+
+@app.get("/api/applications/{opportunity_id}")
+async def get_application_workspace(opportunity_id: str, auth_tuple=Depends(require_auth_token_and_user)):
+    """
+    Everything CareerPulse knows about ONE application: overview, timeline,
+    replies, extracted next steps and any interview.
+
+    Scoped strictly to this application. Nothing is matched by company name.
+    """
+    _, user = auth_tuple
+    if not opportunity_id.strip():
+        raise HTTPException(status_code=400, detail="An opportunity id is required.")
+    workspace = application_workspace.get_application_workspace(
+        _mailbox_db(), user.id, opportunity_id
+    )
+    if not workspace.get("found"):
+        return {"status": "success", "found": False, "opportunity_id": opportunity_id}
+    return {"status": "success", **workspace}
+
+@app.post("/api/email/replies/{reply_id}/analyze")
+async def analyze_reply_now(reply_id: str, auth_tuple=Depends(require_auth_token_and_user)):
+    """
+    Re-run next-step analysis for one reply on demand.
+
+    Same failure isolation as the automatic path: a Gemini failure is reported
+    in the response and never raises into the caller.
+    """
+    _, user = auth_tuple
+    reply = reply_tracker.get_reply(_mailbox_db(), user.id, reply_id)
+    if not reply:
+        raise HTTPException(status_code=404, detail="Reply not found.")
+    result = await asyncio.to_thread(
+        application_workspace.process_reply_analysis, _mailbox_db(), reply
+    )
+    return {"status": "success", "reply_id": reply_id, "result": result}
+
+@app.post("/api/applications/{opportunity_id}/interviews/{interview_id}/calendar")
+async def create_interview_calendar_event(
+    opportunity_id: str,
+    interview_id: str,
+    auth_tuple=Depends(require_auth_token_and_user),
+):
+    """
+    Create the calendar event for one interview.
+
+    Reports precisely what happened instead of failing silently: created,
+    awaiting timezone confirmation, scope missing, not connected, or a provider
+    error. The application and its replies are never affected by a failure here.
+    """
+    _, user = auth_tuple
+    interviews = application_workspace.list_interviews(_mailbox_db(), user.id, opportunity_id)
+    interview = next((i for i in interviews if i.get("id") == interview_id), None)
+    if not interview:
+        raise HTTPException(status_code=404, detail="Interview not found for this application.")
+    company, position = reply_tracker._company_from_opportunity(
+        interview.get("opportunity_id") or ""
+    ), reply_tracker._title_from_opportunity(interview.get("opportunity_id") or "")
+    result = application_workspace.create_calendar_event_for_interview(
+        _mailbox_db(), user.id, interview, company=company, position=position
+    )
+    return {"status": "success", "interview_id": interview_id, "calendar": result}
+
+@app.post("/api/applications/{opportunity_id}/interviews/{interview_id}/timezone")
+async def confirm_interview_timezone(
+    opportunity_id: str,
+    interview_id: str,
+    req: InterviewTimezoneRequest,
+    auth_tuple=Depends(require_auth_token_and_user),
+):
+    """
+    Record the timezone the user confirms for an interview.
+
+    CareerPulse never assumes a zone. An email that stated its own offset is
+    used as-is; anything else waits for this confirmation before an event can
+    be created.
+    """
+    _, user = auth_tuple
+    timezone_text = (req.timezone or "").strip()
+    if not timezone_text:
+        raise HTTPException(status_code=400, detail="A timezone is required.")
+    interview = application_workspace.confirm_interview_timezone(
+        _mailbox_db(), user.id, interview_id, timezone_text
+    )
+    if not interview:
+        raise HTTPException(status_code=404, detail="Interview not found for this application.")
+    return {"status": "success", "interview": interview}
+
+# -------------------------------------------------------------------
+# SCHEDULER-INVOKED REPLY SYNC
+#
+# Vercel Hobby permits only daily crons (the existing /api/digest/send at
+# 03:30 is that one budget), so a */30 cron here would be rejected by the
+# platform. This endpoint is therefore the production path for ~30-minute
+# syncing and is designed to be called by an EXTERNAL scheduler
+# (cron-job.org, GitHub Actions, Cloudflare Workers, or any cron service)
+# that can issue a plain GET every half hour.
+#
+# It deliberately reuses everything that already exists:
+#   * reply_tracker.sync_replies   - the single canonical Gmail sync
+#   * reply_tracker.match_reply    - the single canonical reply matcher
+#   * application_workspace        - Gemini analysis + timeline + calendar
+#   * mailbox_connections          - the one stored OAuth connection
+# No second Gmail client, no second OAuth flow and no second reply store exist.
+#
+# Authentication is a single shared secret (SYNC_CRON_SECRET) in the
+# X-Sync-Secret header, compared with hmac.compare_digest. There is no
+# default: when the env var is unset this endpoint refuses every caller
+# instead of running with a guessable key. No OAuth token or API key is
+# ever accepted, returned or logged here.
+#
+# Duplicate execution is safe by construction: Gmail replies dedupe on
+# unique(provider, provider_message_id), already-analyzed replies are skipped,
+# and timeline/interview/calendar rows dedupe on unique(user_id, dedupe_key).
+# Running this twice in the same minute cannot create a second reply,
+# a second analysis or a second calendar event.
+# -------------------------------------------------------------------
+
+@app.api_route("/api/cron/sync-replies", methods=["GET", "POST"])
+async def cron_sync_replies(request: Request, x_sync_secret: Optional[str] = Header(None)):
+    """
+    Sync every connected mailbox and analyze any new replies.
+
+    Called on a ~30 minute cadence by an external scheduler. Safe to call
+    repeatedly and safe to call concurrently with a user pressing "Sync
+    Replies": per-user failures are isolated so one broken connection can
+    never stop the run for everyone else.
+    """
+    expected = (settings.sync_cron_secret or "").strip()
+    if not expected:
+        # Not a 500 and not a silent success: say plainly that it is unconfigured.
+        raise HTTPException(
+            status_code=503,
+            detail="Automatic sync is not configured. Set SYNC_CRON_SECRET to enable it.",
+        )
+
+    presented = (x_sync_secret or request.query_params.get("secret") or "").strip()
+    if not presented or not hmac.compare_digest(presented, expected):
+        raise HTTPException(status_code=401, detail="Unauthorized.")
+
+    db = _mailbox_db()
+
+    # Find the users who actually have a connection. No user enumeration
+    # endpoint exists and none is added here.
+    try:
+        result = db.table("mailbox_connections") \
+            .select("user_id, status, last_sync_at") \
+            .not_.is_("user_id", "null") \
+            .limit(max(1, settings.sync_cron_max_users)).execute()
+        connections = getattr(result, "data", None) or []
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Cron reply sync could not read connections: %s", e)
+        raise HTTPException(status_code=503, detail="Mailbox storage is unavailable.")
+
+    users, synced, inserted, analyzed, interviews, failed = 0, 0, 0, 0, 0, 0
+    details = []
+
+    for connection in connections:
+        user_id = connection.get("user_id")
+        if not user_id:
+            continue
+        users += 1
+        try:
+            report = await reply_tracker.sync_replies(db, user_id, force=True)
+            if report.get("status") == "error":
+                # Never surface provider internals or credentials.
+                details.append({
+                    "user_id": user_id,
+                    "status": "error",
+                    "error_code": report.get("error_code") or "mailbox_error",
+                })
+                failed += 1
+                continue
+
+            synced += 1
+            inserted += int(report.get("inserted") or 0)
+
+            if report.get("inserted"):
+                analysis = await application_workspace.process_new_replies(
+                    db, user_id, report.get("new_reply_ids") or None
+                )
+                analyzed += int(analysis.get("analyzed") or 0)
+                interviews += int(analysis.get("interviews") or 0)
+                details.append({
+                    "user_id": user_id,
+                    "status": "success",
+                    "inserted": report.get("inserted"),
+                    "duplicates": report.get("duplicates"),
+                    "analyzed": analysis.get("analyzed"),
+                    "interviews": analysis.get("interviews"),
+                })
+            else:
+                details.append({
+                    "user_id": user_id,
+                    "status": "success",
+                    "inserted": 0,
+                    "duplicates": report.get("duplicates"),
+                })
+        except Exception as e:  # noqa: BLE001 - one user must never stop the run
+            logger.warning("Cron reply sync failed for a user: %s", e)
+            details.append({"user_id": user_id, "status": "error", "error_code": "sync_failed"})
+            failed += 1
+
+    return {
+        "status": "success",
+        "users_checked": users,
+        "users_synced": synced,
+        "users_failed": failed,
+        "replies_inserted": inserted,
+        "replies_analyzed": analyzed,
+        "interviews_recorded": interviews,
+        "details": details,
+    }
 
 @app.post("/api/email/draft-response")
 async def draft_email_response(req: ReplyDraftRequest, auth_tuple=Depends(require_auth_token_and_user)):

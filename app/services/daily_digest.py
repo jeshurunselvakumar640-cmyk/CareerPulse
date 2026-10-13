@@ -11,7 +11,7 @@ from app.services.email_template import build_digest_html, build_digest_text
 from app.services.news_service import fetch_and_verify_technology_news
 from app.services.job_search import discover_and_extract_opportunities
 from app.services.ai_matcher import deterministic_score_opportunity, display_skills
-from app.services.supabase_client import get_supabase_client
+from app.services.supabase_client import get_supabase_client, get_service_role_client
 
 logger = logging.getLogger("careerpulse.daily_digest")
 
@@ -70,7 +70,7 @@ def is_digest_already_sent_today(user_id: str, recipient_email: str) -> bool:
 
     # 2. Check Supabase email_logs table
     try:
-        supabase = get_supabase_client()
+        supabase = get_service_role_client() or get_supabase_client()
         # Query for matching opportunity_id today
         res = supabase.table("email_logs").select("*").eq("opportunity_id", expected_digest_id).execute()
         if res.data and len(res.data) > 0:
@@ -217,7 +217,7 @@ async def send_daily_digest(user_profile: Dict[str, Any], force: bool = False) -
 
     # Supabase log
     try:
-        supabase = get_supabase_client()
+        supabase = get_service_role_client() or get_supabase_client()
         supabase.table("email_logs").insert({
             "user_id": user_id,
             "opportunity_id": digest_key,

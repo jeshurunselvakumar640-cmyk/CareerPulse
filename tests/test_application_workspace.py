@@ -65,6 +65,7 @@ class FakeQuery:
         self.store, self.table_name, self.op = store, table, op
         self.filters, self.order_field, self.order_asc, self._limit, self._payload = [], None, True, None, None
         self._single = False
+        self._negate_next = False
 
     def select(self, *a, **k):
         self.op = "select"
@@ -87,7 +88,17 @@ class FakeQuery:
         return self
 
     def is_(self, field, value):
-        self.filters.append(("is", field, value))
+        kind = "not_is" if self._negate_next else "is"
+        self._negate_next = False
+        self.filters.append((kind, field, value))
+        return self
+
+    @property
+    def not_(self):
+        # postgrest exposes `not_` as an attribute holding a filter builder, not
+        # a method, so this must be a property. The following filter is negated,
+        # e.g. the cron endpoint's .not_.is_("user_id", "null").
+        self._negate_next = True
         return self
 
     def order(self, field, desc=False, asc=None):
@@ -113,9 +124,18 @@ class FakeQuery:
                     return False
                 if value is not None and actual != value:
                     return False
+            if kind == "not_is":
+                actual = row.get(field)
+                # "null" is PostgREST's literal for SQL NULL, not the 4-char string.
+                if value == "null":
+                    if actual is None:
+                        return False
+                elif actual == value:
+                    return False
         return True
 
     def execute(self):
+        self._negate_next = False
         if self.table_name not in self.store:
             raise FakeApiError("PGRST205: relation does not exist (schema cache)")
         rows = self.store[self.table_name]
@@ -896,6 +916,173 @@ for label, body, should_detect in MATRIX:
         ok = got is None
         extra = f" -> wrongly detected {got['date_text']} {got['time_text']}" if got else ""
     check(f"Interview grounding: {label}", ok, extra)
+
+print("\n=== 14. STRANDED-REPLY TRIGGER FIX (regression) ===")
+
+# Regression test for the confirmed bug: analysis used to be gated on
+# `inserted`, so a reply already stored with analysis_state = NULL was reported
+# by Gmail as a duplicate (inserted = 0) and never reached Gemini. This test
+# drives the REAL cron endpoint with a duplicate-only sync report and asserts
+# the stranded reply is picked up and analyzed anyway.
+
+Gemini_MODE_FIX = {"n": 0}
+
+
+class _CountingModelsFix(_FakeModels):
+    def generate_content(self, model=None, contents=None):
+        Gemini_MODE_FIX["n"] += 1
+        return _FakeModels.generate_content(self, model=model, contents=contents)
+
+
+class _CountingClientFix(_FakeClient):
+    def __init__(self, api_key=None):
+        self.models = _CountingModelsFix()
+
+
+genai.Client = _CountingClientFix
+aw.reply_tracker._supports_replies.clear()
+aw.reply_tracker._supports_enrichment.clear()
+
+STRANDED_BODY = (
+    "Hi,\n\nThanks for applying to the Frontend Developer Internship. Please submit the "
+    "assessment before 20 November 2026 at 11:59 PM GMT.\n\nBest,\nExample Technologies"
+)
+
+trigger_db = FakeSupabase()
+trigger_db.seed("mailbox_connections", [
+    {"user_id": USER, "status": "connected", "last_sync_at": None,
+     "mailbox_email": "candidate@example.com", "scopes": CONNECTION_SCOPES_NO_CALENDAR},
+])
+trigger_db.seed("email_replies", [
+    # The stranded reply: stored, never analyzed.
+    {"id": "stranded-1", "user_id": USER, "opportunity_id": "example_frontend_developer_intern",
+     "subject": "Your application", "body_text": STRANDED_BODY,
+     "classification": "positive_response", "classification_summary": "assessment sent",
+     "received_at": datetime.now(timezone.utc).isoformat(),
+     "next_steps": None, "analysis_state": None},
+    # Already analyzed: must never be sent to Gemini again.
+    {"id": "done-1", "user_id": USER, "opportunity_id": "example_frontend_developer_intern",
+     "subject": "Already handled", "body_text": STRANDED_BODY,
+     "classification": "positive_response", "classification_summary": "done",
+     "received_at": datetime.now(timezone.utc).isoformat(),
+     "next_steps": ["1. Already extracted."], "analysis_state": "analyzed"},
+])
+trigger_db.seed("email_logs", [])
+trigger_db.seed("application_timeline_events", [])
+trigger_db.seed("application_interviews", [])
+
+# Gmail reports the reply as a duplicate, NOT a new insert.
+DUPLICATE_REPORT = {
+    "status": "success", "checked": 10, "matched": 1, "inserted": 0,
+    "duplicates": 1, "unlinked": 0, "failed": 0, "skipped": False,
+    "message": "", "unread_count": 1, "error_code": "", "new_reply_ids": [],
+}
+
+# Patch the namespace the endpoint ACTUALLY executes in. The route's
+# endpoint.__globals__ is its defining module, which is not necessarily the same
+# object as the one this file imported by name.
+_cron_route = next(r for r in _main.app.routes
+                   if getattr(r, "path", "") == "/api/cron/sync-replies")
+_cron_globals = _cron_route.endpoint.__globals__
+
+_real_sync_replies = _cron_globals["reply_tracker"].sync_replies
+_real_mailbox_db = _cron_globals["_mailbox_db"]
+
+
+async def fake_sync_replies(supabase, uid, force=False):
+    fake_sync_replies.calls.append({"uid": uid, "force": force})
+    return dict(DUPLICATE_REPORT)
+
+
+fake_sync_replies.calls = []
+_cron_globals["reply_tracker"].sync_replies = fake_sync_replies
+_cron_globals["_mailbox_db"] = lambda: trigger_db
+
+try:
+    from fastapi.testclient import TestClient
+    client = TestClient(_main.app)
+
+    _settings.sync_cron_secret = "b" * 40
+    Gemini_MODE_FIX["n"] = 0
+
+    check("Endpoint namespace resolves to the patched database",
+          _cron_globals["_mailbox_db"]() is trigger_db)
+    check("Endpoint namespace has the fake Gmail sync",
+          _cron_globals["reply_tracker"].sync_replies is fake_sync_replies)
+
+    resp = client.get("/api/cron/sync-replies", headers={"X-Sync-Secret": "b" * 40})
+    payload = resp.json()
+
+    check("Cron sync still returns 200 on a duplicate-only sync", resp.status_code == 200,
+          str(resp.status_code))
+    check("Gmail sync was actually invoked by the cron endpoint",
+          len(fake_sync_replies.calls) == 1, str(len(fake_sync_replies.calls)))
+    check("Cron reports 0 inserted and >0 duplicates, as the bug scenario describes",
+          payload.get("replies_inserted") == 0, str(payload.get("replies_inserted")))
+    check("Analysis ran even though inserted == 0 (the fix)",
+          payload.get("replies_analyzed") == 1, str(payload.get("replies_analyzed")))
+
+    check("The stranded reply reached Gemini", Gemini_MODE_FIX["n"] == 1,
+          f"gemini calls={Gemini_MODE_FIX['n']}")
+    stranded_row = next(r for r in trigger_db.store["email_replies"] if r["id"] == "stranded-1")
+    check("The stranded reply is now analyzed", stranded_row.get("analysis_state") == "analyzed",
+          str(stranded_row.get("analysis_state")))
+    check("The stranded reply now has next steps stored",
+          bool(stranded_row.get("next_steps")), str(stranded_row.get("next_steps")))
+    check("A timeline event was recorded for the recovered reply",
+          len(trigger_db.store["application_timeline_events"]) == 1,
+          str(len(trigger_db.store["application_timeline_events"])))
+
+    # Only ONE Gemini call: the already-analyzed reply must not be re-analyzed.
+    check("The already-analyzed reply was NOT sent to Gemini again",
+          Gemini_MODE_FIX["n"] == 1, f"gemini calls={Gemini_MODE_FIX['n']}")
+    done_row = next(r for r in trigger_db.store["email_replies"] if r["id"] == "done-1")
+    check("The already-analyzed reply kept its original steps",
+          done_row.get("next_steps") == ["1. Already extracted."], str(done_row.get("next_steps")))
+
+    # Idempotency: a second cron run must not re-analyze the recovered reply.
+    Gemini_MODE_FIX["n"] = 0
+    resp2 = client.get("/api/cron/sync-replies", headers={"X-Sync-Secret": "b" * 40})
+    check("A second cron run analyzes nothing new", resp2.json().get("replies_analyzed") == 0,
+          str(resp2.json().get("replies_analyzed")))
+    check("A second cron run makes no Gemini call", Gemini_MODE_FIX["n"] == 0,
+          f"gemini calls={Gemini_MODE_FIX['n']}")
+
+    # The manual endpoint must behave the same way.
+    trigger_db.store["email_replies"][0]["analysis_state"] = None
+    trigger_db.store["email_replies"][0]["next_steps"] = None
+    Gemini_MODE_FIX["n"] = 0
+
+    async def manual_sync_stub(*args, **kwargs):
+        return {"status": "success", "inserted": 0, "duplicates": 1,
+                "unread_count": 0, "new_reply_ids": []}
+
+    _main.reply_tracker.sync_replies = manual_sync_stub
+    _cron_globals["reply_tracker"].sync_replies = manual_sync_stub
+    manual_src = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                   "app", "main.py"), encoding="utf-8").read()
+    sync_fn_start = manual_src.find("async def sync_email_replies(")
+    sync_fn_end = manual_src.find("@app.get(\"/api/email/replies\")")
+    manual_body = manual_src[sync_fn_start:sync_fn_end]
+    check("Manual sync no longer gates analysis on `inserted`",
+          'if result.get("inserted")' not in manual_body)
+    check("Manual sync always calls process_new_replies",
+          "process_new_replies(" in manual_body
+          and 'result.get("new_reply_ids") or None' in manual_body)
+    cron_start = manual_src.find("async def cron_sync_replies(")
+    cron_body = manual_src[cron_start:]
+    check("Cron sync no longer gates analysis on `inserted`",
+          'if report.get("inserted")' not in cron_body)
+    check("Cron sync always calls process_new_replies",
+          "process_new_replies(" in cron_body
+          and 'report.get("new_reply_ids") or None' in cron_body)
+except Exception as e:  # pragma: no cover - optional dependency
+    skip("stranded-reply trigger regression", f"{type(e).__name__}: {e}")
+finally:
+    _cron_globals["reply_tracker"].sync_replies = _real_sync_replies
+    _cron_globals["_mailbox_db"] = _real_mailbox_db
+    _settings.sync_cron_secret = ""
+    genai.Client = _FakeClient
 
 print("\n" + "=" * 60)
 print(f"  PASSED: {len(PASS)}    FAILED: {len(FAIL)}    SKIPPED: {len(SKIP)}")

@@ -268,7 +268,7 @@ def _opportunity_card(opp: Dict[str, Any]) -> str:
     if deadline:
         rows += _row("Deadline", esc_clean(format_display_date(deadline) or str(deadline)))
 
-    url = safe_url(opp.get("application_url")) or safe_url(opp.get("source_url"))
+    url = safe_url(opp.get("application_url")) or safe_url(opp.get("source_url")) or safe_url(opp.get("url"))
     button_block = f'<div style="margin-top:16px;">{_button(url, "View Opportunity")}</div>' if url else ""
 
     return (
@@ -567,7 +567,7 @@ def build_digest_text(
             if deadline:
                 lines.append(f"Deadline: {format_display_date(deadline) or clean_inline(str(deadline))}")
 
-            url = safe_url(opp.get("application_url")) or safe_url(opp.get("source_url"))
+            url = safe_url(opp.get("application_url")) or safe_url(opp.get("source_url")) or safe_url(opp.get("url"))
             if url:
                 lines.append(f"Apply: {url}")
             lines.append("-" * 50)

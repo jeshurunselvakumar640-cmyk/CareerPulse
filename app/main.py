@@ -1081,15 +1081,32 @@ async def sync_email_replies(req: Optional[ReplySyncRequest] = None, auth_tuple=
     # stored and still reported, exactly as before this feature existed. The
     # outcome is attached under "workspace" purely so the user can see what was
     # done (PART 17 transparency).
-    if result.get("inserted"):
-        try:
-            analysis = await application_workspace.process_new_replies(
-                _mailbox_db(), user.id, result.get("new_reply_ids") or None
-            )
-        except Exception as e:  # noqa: BLE001 - never fail a completed sync
-            logger.warning("Application workspace analysis skipped: %s", e)
-            analysis = {"processed": 0, "analyzed": 0, "failed": 0, "error": str(e)[:200]}
-        result["workspace"] = analysis
+    # Application workspace: extract grounded next steps and detect interviews.
+    #
+    # This is deliberately NOT gated on `inserted`. A reply can already exist in
+    # email_replies with analysis_state = NULL while Gmail reports it as a
+    # duplicate (inserted = 0), because the run that stored it failed or was
+    # interrupted. Gating on `inserted` made analysis a one-shot with no retry,
+    # which stranded those replies permanently: the recovery query
+    # `is_("analysis_state", None)` inside process_new_replies only runs when no
+    # new ids are passed, so it was unreachable.
+    #
+    # Passing `new_reply_ids or None` handles both cases with one call: new ids
+    # are analysed immediately, and when there are none the None fallback picks
+    # up every stranded reply. Already-analysed replies stay protected by the
+    # existing analysis_state == "analyzed" skip inside process_new_replies.
+    #
+    # Still strictly isolated: the sync result above is already final, so a
+    # Gemini or Calendar failure leaves the reply stored and reported exactly as
+    # before. The outcome is attached under "workspace" for transparency.
+    try:
+        analysis = await application_workspace.process_new_replies(
+            _mailbox_db(), user.id, result.get("new_reply_ids") or None
+        )
+    except Exception as e:  # noqa: BLE001 - never fail a completed sync
+        logger.warning("Application workspace analysis skipped: %s", e)
+        analysis = {"processed": 0, "analyzed": 0, "failed": 0, "error": str(e)[:200]}
+    result["workspace"] = analysis
 
     return result
 
@@ -1329,27 +1346,35 @@ async def cron_sync_replies(request: Request, x_sync_secret: Optional[str] = Hea
             synced += 1
             inserted += int(report.get("inserted") or 0)
 
-            if report.get("inserted"):
+            # Same reasoning as the manual endpoint, and deliberately not gated
+            # on `inserted`: a reply stored with analysis_state = NULL is
+            # reported as a duplicate forever, so gating here would leave it
+            # stranded permanently and the `is_("analysis_state", None)`
+            # recovery query inside process_new_replies unreachable.
+            #
+            # Passing `new_reply_ids or None` analyses new ids when there are
+            # any, and otherwise falls through to the recovery query for
+            # unanalysed replies. `analysis_state == "analyzed"` replies are
+            # still skipped inside process_new_replies, so repeated scheduler
+            # runs remain idempotent and cost nothing.
+            try:
                 analysis = await application_workspace.process_new_replies(
                     db, user_id, report.get("new_reply_ids") or None
                 )
-                analyzed += int(analysis.get("analyzed") or 0)
-                interviews += int(analysis.get("interviews") or 0)
-                details.append({
-                    "user_id": user_id,
-                    "status": "success",
-                    "inserted": report.get("inserted"),
-                    "duplicates": report.get("duplicates"),
-                    "analyzed": analysis.get("analyzed"),
-                    "interviews": analysis.get("interviews"),
-                })
-            else:
-                details.append({
-                    "user_id": user_id,
-                    "status": "success",
-                    "inserted": 0,
-                    "duplicates": report.get("duplicates"),
-                })
+            except Exception as e:  # noqa: BLE001 - one user must never stop the run
+                logger.warning("Reply analysis failed for a user during cron sync: %s", e)
+                analysis = {"processed": 0, "analyzed": 0, "failed": 0, "interviews": 0}
+
+            analyzed += int(analysis.get("analyzed") or 0)
+            interviews += int(analysis.get("interviews") or 0)
+            details.append({
+                "user_id": user_id,
+                "status": "success",
+                "inserted": report.get("inserted"),
+                "duplicates": report.get("duplicates"),
+                "analyzed": analysis.get("analyzed"),
+                "interviews": analysis.get("interviews"),
+            })
         except Exception as e:  # noqa: BLE001 - one user must never stop the run
             logger.warning("Cron reply sync failed for a user: %s", e)
             details.append({"user_id": user_id, "status": "error", "error_code": "sync_failed"})
@@ -1923,6 +1948,18 @@ async def clear_resume_asset(req: ResumeAssetRequest, auth_tuple=Depends(require
 # STATIC MOUNT
 # -------------------------------------------------------------------
 
+# -------------------------------------------------------------------
+# FLET PYTHON GUI MOUNT
+# -------------------------------------------------------------------
+
+try:
+    import flet.fastapi as flet_fastapi
+    from app.flet_app.main import flet_main
+    app.mount("/gui", flet_fastapi.app(flet_main), name="flet_gui")
+    logger.info("Successfully mounted CareerPulse Flet GUI at /gui")
+except Exception as flet_mount_err:
+    logger.warning("Flet GUI could not be mounted: %s", flet_mount_err)
+
 frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
 if os.path.exists(frontend_path):
     app.mount("/static", StaticFiles(directory=frontend_path), name="static")
@@ -1934,8 +1971,10 @@ def _serve_frontend_file(filename: str):
     return None
 
 @app.get("/")
-async def serve_landing():
+async def serve_landing(gui: bool = False):
     """Public landing page. Accessible without authentication."""
+    if gui:
+        return RedirectResponse(url="/gui/")
     response = _serve_frontend_file("landing.html")
     if response is not None:
         response.headers["Cache-Control"] = "no-store"
@@ -1943,8 +1982,10 @@ async def serve_landing():
     return JSONResponse(content={"status": "CareerPulse API active"}, status_code=200)
 
 @app.get("/app")
-async def serve_dashboard_app():
+async def serve_dashboard_app(gui: bool = False):
     """Authenticated single-page application shell."""
+    if gui:
+        return RedirectResponse(url="/gui/")
     response = _serve_frontend_file("index.html")
     if response is not None:
         response.headers["Cache-Control"] = "no-store"
